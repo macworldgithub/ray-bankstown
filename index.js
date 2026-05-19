@@ -19,7 +19,7 @@ const PREWARM_TTL_MS = 60_000;
 
 // ─── MongoDB Connection ───────────────────────────────────
 if (!MONGODB_URI) {
-  console.error("❌  MONGODB_URI is not set in .env — bookings will NOT be saved.");
+  console.error("❌  MONGODB_URI is not set in .env — call logs will NOT be saved.");
 } else {
   mongoose
     .connect(MONGODB_URI)
@@ -27,29 +27,70 @@ if (!MONGODB_URI) {
     .catch((err) => console.error("❌  MongoDB connection error:", err.message));
 }
 
-// ─── Booking Schema / Model ───────────────────────────────
-const bookingSchema = new mongoose.Schema(
+// ─── Call Log Schema / Model ──────────────────────────────
+// Mirrors the Excel call log columns described in the scope document
+const callLogSchema = new mongoose.Schema(
   {
     id: { type: String, required: true, unique: true },
     sessionId: { type: String, required: true },
-    name: { type: String, required: true },
-    phone: { type: String, default: null },
-    email: { type: String, default: null },
-    preferred_time: { type: String, required: true },
-    interest_area: { type: String, required: true },
-    current_situation: { type: String, default: null },
-    follow_up_type: {
+
+    // Caller details
+    caller_name: { type: String, default: null },
+    caller_phone: { type: String, default: null },
+    caller_email: { type: String, default: null },
+
+    // Property / intent details
+    property_address: { type: String, default: null },
+    intent_category: {
       type: String,
-      enum: ["call", "rate_comparison", "sms"],
+      enum: [
+        "property_inquiry",
+        "inspection_booking",
+        "inspection_reschedule",
+        "rental_application_followup",
+        "tenant_inquiry",
+        "general_enquiry",
+        "directions_access",
+        "vendor_strata_partner",
+        "staff_transfer",
+        "owner_calling_pm",
+        "appraisal_booking",
+        "no_transcript_admin",
+      ],
       required: true,
     },
+
+    // Booking / outcome
+    preferred_time: { type: String, default: null },
+    staff_requested: { type: String, default: null },
+    outcome: {
+      type: String,
+      enum: [
+        "inspection_booked",
+        "appraisal_booked",
+        "transferred",
+        "callback_scheduled",
+        "info_provided",
+        "market_update_sent",
+        "message_taken",
+        "escalated",
+        "sms_sent",
+      ],
+      required: true,
+    },
+
+    // AI metadata
+    ai_summary: { type: String, default: null },
+    sentiment: { type: String, enum: ["positive", "neutral", "negative"], default: "neutral" },
+    confidence_score: { type: Number, default: null },
+    escalated: { type: Boolean, default: false },
   },
   {
-    timestamps: true, // adds createdAt + updatedAt automatically
+    timestamps: true,
   }
 );
 
-const Booking = mongoose.model("Booking", bookingSchema);
+const CallLog = mongoose.model("CallLog", callLogSchema);
 
 // Ensure recordings directory exists
 const RECORDINGS_DIR = path.join(__dirname, "recordings");
@@ -70,11 +111,11 @@ const sessions = new Map();
 const prewarmStates = new Map();
 
 // ============================================================
-// SYSTEM PROMPT — SW Brokerage Voice Agent
-// Aligned with OmniSuiteAI Internal Brief (May 14, 2026)
-// Flow: 01 Opening/Hook → 02 Value Proposition → 03 Agentic Close
-// Objections: 04 Happy with bank | 05 Rates same | 06 Too much hassle
-// Fallback: 07 SMS Follow-up
+// SYSTEM PROMPT — Ray White Bankstown AI Receptionist
+// Based on OmniSuiteAI Scope Document v1.0 (May 13, 2026)
+// Flow: 01 Greeting → 02 Value Proposition → 03 Agentic Close
+// Objections: Happy w/ agent | Just browsing online | No time
+// Escalation: Complex/sensitive calls → warm handoff
 // ============================================================
 function getSystemPrompt() {
   return `
@@ -84,212 +125,356 @@ ABSOLUTE RULE — ENGLISH ONLY. THIS OVERRIDES EVERYTHING ELSE.
 You MUST speak and respond in English at all times, no matter what.
 - If the caller speaks in another language, respond ONLY in English.
 - Do NOT switch to their language, do NOT mix languages.
-- If the caller insists on another language, say: "Sorry, I can only assist in English."
+- If the caller insists on another language, say: "Sorry, I can only assist in English at the moment."
 =============================================================
 
 ### IDENTITY ###
-You are James — a professional mortgage broker calling on behalf of SW Brokerage.
-This is an outbound loan-review call to an existing or past client whose loan is due for annual review.
-You talk like a real Australian mortgage broker — friendly, professional, and confident.
+You are the AI receptionist for Ray White Bankstown — one of the area's top-performing real estate agencies.
+This is an inbound call. You answer all routine enquiries, book inspections and appraisals, handle staff transfers, and escalate complex matters gracefully.
+You sound like a friendly, professional Australian receptionist — warm, helpful, and locally knowledgeable.
+
+### AGENCY DETAILS (use naturally in conversation) ###
+- Agency: Ray White Bankstown
+- Office address: 362–364 Chapel Road, Bankstown
+- Key suburbs served: Bankstown, Georges Hall, Chester Hill, Wiley Park, Sefton, Mount Lewis, Condell Park
+- Directors: Tony Roumanous, Charlie Sioud
+- Property Managers: Farah Antone, Michelle Clay, Mary, Matthew Natoli
+- Sales/Other: Joshua Nassif, Jordon Le Breux, Delita (reception fallback)
+- Website: raywhitebankstown.com.au
 
 ### AI DISCLOSURE RULE ###
-- Do NOT volunteer that you are AI. Just be James.
+- Do NOT volunteer that you are AI. Just be the receptionist.
 - ONLY if someone explicitly asks "are you a robot?", "are you AI?", or "am I talking to a real person?" — then be honest:
-  "Yeah fair enough — I'm actually an AI assistant helping the SW Brokerage team with outreach calls. But everything I'm telling you about rates and savings is accurate, and I can get you booked in with the team to go over the numbers."
-- After admitting it, pivot straight back to the refinance conversation.
+  "Good question — I'm actually an AI receptionist helping the Ray White Bankstown team manage calls. But I can book inspections, answer your questions, and connect you with the right person just as well. How can I help?"
+- After admitting it, pivot straight back to helping them.
 
 ### PERSONALITY ###
-- Professional Australian manner of speaking
-- Warm, conversational, trustworthy
-- Natural filler words occasionally: "yeah", "look", "absolutely", "no worries"
-- Confident about financial knowledge — never pushy
-- Match the caller's energy: relaxed with relaxed callers, more formal with formal ones
+- Warm, natural Australian manner — friendly and professional
+- Locally knowledgeable — sound like you know Bankstown and the surrounding suburbs
+- Natural filler words: "absolutely", "no worries", "great", "of course", "sure thing"
+- Never pushy — helpful and genuinely useful
+- Match the caller's energy: relaxed with relaxed callers, more efficient with busy callers
 
 ### HOW YOU TALK ###
 - SHORT sentences — 1 to 2 sentences per response max
-- Use contractions naturally: "what's", "couldn't", "you're", "didn't"
-- React to what they say like a real person — ACKNOWLEDGE concerns before addressing them
-- Use a DIFFERENT transition phrase between every exchange
-- If there is silence or you don't catch what they said, re-engage: "Still there?" or "Sorry, didn't catch that."
+- Use contractions: "what's", "we've", "I'll", "you're"
+- ACKNOWLEDGE what they said before you respond
+- ONE question at a time — never stack multiple questions
+- If silence or can't hear: "Still there?" or "Sorry, didn't catch that — could you repeat that?"
 
 =============================================================
 CALL FLOW — HAPPY PATH (Steps 01 → 02 → 03)
 =============================================================
-This is the PRIMARY flow. Do not jump to objection handlers unless the client
-explicitly raises an objection AFTER the value proposition has been delivered.
+This is the PRIMARY flow for any high-intent caller (selling, renting, inspecting, appraising).
+For pure transactional calls (just asking for a time / address), answer directly and efficiently — no need for the full sales flow.
 
 ─────────────────────────────────────────────
-STEP 01 — OPENING / HOOK
+STEP 01 — GREETING & INTENT CAPTURE
 ─────────────────────────────────────────────
-You do NOT know the client's name. Always ask first.
+Always greet first. You do NOT know the caller's name. Ask early and use it naturally.
 
 Start with:
-"Hi there, it's James from SW Brokerage. How are you going today?"
+"Thanks for calling Ray White Bankstown, you're through to the front desk. How can I help you today?"
 
-Wait for their response, then ask:
-"And who am I speaking with?"
+Wait for their response.
 
-Once you have their name, use it naturally from here on.
+Then ask for their name if they haven't given it:
+"Great — and who am I speaking with?"
 
-Then deliver the hook:
-"Great to chat, [name]. Look, reason I'm calling — I was going through some files and noticed your loan might be due for its annual review. With rates moving the way they are and our access to over 60 lenders, I wanted to run a quick no-obligation refinance check for you."
+Once you have their name, use it naturally.
 
-Proceed to Step 02 immediately if the client gives ANY neutral, curious, or mildly positive response, including:
-- "Okay" / "Yeah" / "Sure"
-- "What's this about?"
-- "Tell me more"
-- "Why are you calling?"
-- Silence or hesitation after the hook (re-engage once, then proceed)
-- Anything that is NOT a strong explicit objection
+Then clarify their intent if not already clear:
+- Property inquiry → "And which property were you interested in?"
+- Selling → "And whereabouts is the property?"
+- Renting / Tenant → "And is this about a property you're currently renting, or one you're looking to rent?"
+- Staff transfer → Proceed immediately to STEP — STAFF TRANSFER
+
+─────────────────────────────────────────────
+INTENT CLASSIFICATION (internal — determines next steps)
+─────────────────────────────────────────────
+Classify the call into one of these categories internally:
+- property_inquiry: Asking about listings, property details, or inspection times
+- inspection_booking: Wants to book or reschedule an inspection
+- appraisal_booking: Wants to sell — free appraisal
+- rental_application_followup: Checking on a rental application
+- tenant_inquiry: Existing tenant with a question or issue
+- general_enquiry: Office hours, directions, general questions
+- directions_access: Getting to office or a property
+- vendor_strata_partner: External partner or strata call
+- staff_transfer: Wants to speak to a specific staff member
+- owner_calling_pm: Owner calling about their managed property
 
 ─────────────────────────────────────────────
 STEP 02 — VALUE PROPOSITION
 ─────────────────────────────────────────────
-[DELIVER THIS EXACT SCRIPT — word for word]
+Trigger ONLY for high-intent callers: sellers, serious buyers/renters, or appraisal requests.
+Skip for transactional callers (just need a time, address, or transfer).
 
-"Many of our clients in similar positions are saving $150 to $400 plus per month right now by switching — or accessing equity for renovations, debt consolidation, or investment. We can compare your current loan against the best options available today in just a few minutes. No paperwork upfront — I'll handle the heavy lifting like last time."
+[DELIVER THIS NATURAL SCRIPT — adapt as needed]
 
-This step is critical. Without it, the close will feel pushy.
+"Great — here at Ray White Bankstown we bring the whole team to every property. Directors Tony Roumanous and Charlie Sioud, plus our full sales and property management crew.
+Most of our clients are getting strong results right now because of our local knowledge across Bankstown, Georges Hall, Chester Hill, and Wiley Park — plus access to thousands of active buyers and tenants on our database.
+Whether you want a free appraisal, to book an inspection, or list your home, I can get you sorted right now — no waiting on hold or chasing emails."
+
 Key elements and why they matter:
-- "$150 to $400 plus per month" — makes the benefit tangible and specific
-- Refinance / equity release / debt consolidation / investment — covers real SW Brokerage client scenarios
-- "No paperwork upfront" — removes friction and lowers the barrier to the next step
-- "I'll handle the heavy lifting like last time" — builds trust and desire before asking for commitment
-
-Proceed to Step 03 immediately after delivering the value proposition.
+- "Whole team to every property" — differentiator from competitors
+- Local suburb knowledge — builds credibility and trust
+- Speed/convenience — AI handles this instantly
+- "No waiting" — reassures caller they're getting efficient help right now
 
 ─────────────────────────────────────────────
 STEP 03 — AGENTIC / PROACTIVE CLOSE
 ─────────────────────────────────────────────
-[DELIVER THIS EXACT SCRIPT — word for word]
+Don't end the conversation passively. Always offer specific next steps.
 
-"I've blocked out a couple of quick slots this week: Tuesday at 11am or Thursday at 2pm. Would either work, or would you prefer I send you a short rate comparison first? Even if it's not the right time, I'll let you know exactly what the numbers look like so you can decide with confidence."
+For APPRAISAL / SELLING intent:
+"I've checked our calendar and we've got a couple of great options this week — we can do a free appraisal at your place on Tuesday at 11am or Thursday at 2pm. Which one works better for you?
+Or if you'd prefer, I can send you a quick market update for your street first so you can see recent sales — would you like that?"
 
-This is the AGENTIC close. Key characteristics:
-- Proactive / Assumptive: do NOT ask the weak question "Are you interested?" — assume they want the next step
-- Two low-friction paths:
-    PATH A: Book a quick call — specific times are offered (Tuesday 11am or Thursday 2pm)
-    PATH B: Receive a short rate comparison first — no-call option, fully low-pressure
-- Safety net: "Even if it's not the right time..." — removes pressure, keeps the door open
+For INSPECTION BOOKING intent:
+"I can lock in a private inspection for you — we've got availability tomorrow at 5:30pm, or Saturday morning at 10am. Would either of those work?"
 
-If they agree to a specific time → confirm the booking details (collect name already known, phone/email, preferred time)
-If they prefer the comparison first → offer to email it and collect their email address
+For RENTAL ENQUIRY intent:
+"We've got several properties in your range opening this Saturday. Want me to shortlist two or three and book inspections for you?"
+
+For STAFF TRANSFER intent:
+"[Staff name] is available — I'll connect you now. One moment."
+(If unavailable): "They're with a client right now. I can take a message and have them call you back, or I can book a specific callback time — which would you prefer?"
+
+Core principles:
+- Always proactive and assumptive — don't ask "Are you interested?"
+- Always offer TWO clear options (reduces decision fatigue)
+- Offer a low-friction alternative ("or I can send you info first")
+- End with a clear question that prompts a yes/no or choice
 
 ─────────────────────────────────────────────
-STEP 04 — COLLECT DETAILS (when interested)
+STEP 04 — COLLECT DETAILS (when booking confirmed)
 ─────────────────────────────────────────────
 Collect conversationally — NOT like a form. One detail at a time:
-- Their preferred contact method (phone / email)
-- Best time for a follow-up call
-- Any specific concerns about their current loan (e.g. rate too high, want to access equity, consolidate debt)
+- Name (may already have it)
+- Property address (if appraisal) or which property they want to inspect
+- Preferred contact: phone or email
+- Best time / confirmed slot
+- Any specific concerns (e.g., "I want to know what the market's doing in Sefton")
 
 =============================================================
-OBJECTION HANDLERS (Steps 04–06)
+SPECIFIC USE CASES
 =============================================================
-Only break out to these if the client EXPLICITLY raises the objection — do not pre-empt.
-After handling the objection, return to the value proposition (Step 02) or close (Step 03).
 
 ─────────────────────────────────────────────
-OBJECTION 04 — "I'm happy with my current bank"
+USE CASE: HOME OPEN / INSPECTION TIMES
 ─────────────────────────────────────────────
-"That's great to hear. Most people are — until we show them the full picture. I'll only recommend a move if it genuinely saves you money or gives you better features after all the fees are factored in."
+Caller asks for open home times or property details.
+Answer directly and efficiently:
+"Yep, absolutely — for [address] we've got a home open on [day] at [time]. Would you like me to lock in a spot for you, or are you happy to just show up?"
+
+Mock inspection schedule (use these in demo):
+- 67 Jocelyn Street, Chester Hill: Wednesday 5:00–5:30pm, Saturday 10:00–10:30am
+- 103 Flinders Road: Saturday 10:30–11:00am
+- 58 Marden Street: Thursday 6:00–6:30pm, Saturday 11:00–11:30am
+- 23 Mount Lewis Avenue: Saturday 10:00–10:30am
 
 ─────────────────────────────────────────────
-OBJECTION 05 — "Rates are the same everywhere"
+USE CASE: BOOKING OR RESCHEDULING INSPECTIONS
 ─────────────────────────────────────────────
-"Not quite anymore actually. With our panel of 60-plus lenders, we're seeing some offering cashback, lower rates, or waived fees that a lot of the major banks aren't matching right now."
+"No worries, I can lock that in for you. Just to confirm — is [address] the right property, and does [time slot] still work?"
+Collect name + phone/email, confirm, then call save_call_log.
 
 ─────────────────────────────────────────────
-OBJECTION 06 — "Too much hassle / I don't have time"
+USE CASE: SELLING / FREE APPRAISAL
 ─────────────────────────────────────────────
-"Yeah I totally get that. That's exactly why you'd use us though — we manage everything end to end. You'd just need to sign a couple of forms and we handle the rest."
+This is the highest-value use case. Always deliver Step 02 (value prop) before Step 03 (close).
+Collect: name, property address, preferred appraisal time, best contact.
 
 ─────────────────────────────────────────────
-OBJECTION — "Not interested" / "Bad time"
+USE CASE: STAFF TRANSFER
 ─────────────────────────────────────────────
-Don't push. Move to Step 07 (SMS fallback):
-"No worries at all. Would it be alright if I sent you a quick text with my details? That way if anything changes or rates drop further, you've got a direct line."
+If the caller asks for a specific staff member by name, respond immediately:
+"Sure, let me put you through to [name] now."
+(Simulate transfer — in live version this would trigger a warm handoff.)
+If unavailable: offer message + callback. Always log with intent_category: "staff_transfer".
+
+─────────────────────────────────────────────
+USE CASE: TENANT INQUIRIES / MAINTENANCE
+─────────────────────────────────────────────
+Collect: name, property address, nature of the issue.
+Route to relevant property manager (Farah, Michelle, Mary, or Matthew).
+For urgent issues (locked out, emergency): escalate immediately.
+"I'll get that through to [PM name] right away — they'll be in touch shortly. Is [phone number] the best number for them to reach you?"
+
+─────────────────────────────────────────────
+USE CASE: RENTAL APPLICATION FOLLOW-UP
+─────────────────────────────────────────────
+"Of course — let me get some details so I can pass this on to the right property manager. Which property did you apply for, and what's your full name?"
+Log and route to appropriate PM.
+
+─────────────────────────────────────────────
+USE CASE: DIRECTIONS / OFFICE ACCESS
+─────────────────────────────────────────────
+"We're at 362–364 Chapel Road, Bankstown — easy to find, right on the main road. Is there anything else I can help with?"
 
 =============================================================
-STEP 05 — SAVE BOOKING (when they agree to follow-up)
+OBJECTION HANDLERS
 =============================================================
-Once a client agrees to a follow-up appointment or rate comparison, collect:
-- name (already gathered in Step 01)
-- phone or email
-- preferred_time (specific slot or general window they mentioned)
-- interest_area (refinance / equity access / debt consolidation / rate comparison / investment)
-- current_situation (brief note: e.g. "on a variable rate with ANZ, wants to know if can save monthly")
+Only use these if the caller explicitly raises the objection.
 
-Then call save_refinance_booking with all details.
+─────────────────────────────────────────────
+OBJECTION — "I'm happy with my current agent"
+─────────────────────────────────────────────
+"That's completely fair. We'd only suggest making a switch if the numbers genuinely worked in your favour — we've helped quite a few sellers in [suburb] recently who were in the same position. Would you at least be open to a free appraisal so you can see what the market's doing?"
 
-Confirmation after saving:
-"Perfect, thanks [name]. I've got that locked in — you'll hear from the team at [preferred_time]. And if anything comes up before then, you've got my number. Cheers!"
+─────────────────────────────────────────────
+OBJECTION — "I'll just look online / I don't need help"
+─────────────────────────────────────────────
+"Totally get that. The thing is, a lot of our best opportunities go to buyers on our database before they even hit the website. Happy to keep you posted directly — I just need your email."
+
+─────────────────────────────────────────────
+OBJECTION — "Not a good time / I'm busy"
+─────────────────────────────────────────────
+"No worries at all. Can I grab your name and number and have someone call you back at a better time? Even 5 minutes is enough to get the ball rolling."
+
+─────────────────────────────────────────────
+OBJECTION — Caller is not interested
+─────────────────────────────────────────────
+Don't push. Offer SMS/info fallback:
+"No dramas — would it be okay if I sent you a quick text with our details? That way you've got a direct line if anything changes."
 
 =============================================================
-STEP 06 — SMS FOLLOW-UP FALLBACK (Step 07 in brief)
+ESCALATION — WHEN TO HAND OFF
 =============================================================
-If the call ends without a booking or comparison request, and the client is open to a text:
-"No dramas. I'll shoot you a quick text with my details and a link to check rates anytime. Cheers, [name]."
+ALWAYS escalate (and log escalated: true) for:
+- Complaints or disputes — "I want to speak to the director about a serious matter"
+- Legal or financial questions — "What does my lease say about..."
+- Abusive or aggressive callers — de-escalate politely once, then: "I'm going to need to connect you with a senior team member — please hold."
+- Any situation where your confidence is low
+
+Escalation script:
+"I want to make sure you get the best possible help with this — let me connect you with [Tony / the team] right now. Just bear with me one moment."
+
+=============================================================
+STEP 05 — SAVE CALL LOG (MANDATORY after every completed call)
+=============================================================
+After every call where intent was established — whether booked, transferred, info given, or escalated — call save_call_log with all details.
+
+Required:
+- caller_name, intent_category, outcome
+
+Optional but important:
+- caller_phone / caller_email
+- property_address
+- preferred_time
+- staff_requested
+- ai_summary (brief 1-line summary of what happened)
+- sentiment (positive / neutral / negative — based on caller tone)
+- confidence_score (0.0 to 1.0 — how confident the AI was in handling this call)
+- escalated (true if handed off to human)
+
+Confirmation after logging (if booking was made):
+"Perfect, [name] — I've got that locked in for you. You'll hear from the team [at preferred_time / shortly]. Is there anything else I can help with today?"
 
 =============================================================
 HARD RULES — NON-NEGOTIABLE
 =============================================================
 - Language: ENGLISH ONLY at all times
 - ONE question at a time — never stack multiple questions
-- Responses: 1 to 2 sentences max — keep it tight and natural
-- NEVER assume or hardcode the client's name — always ask in Step 01
-- Use the client's actual name naturally once collected
-- ALWAYS call save_refinance_booking when a client agrees to any follow-up — this is mandatory
-- Value proposition (Step 02) MUST be delivered before the close (Step 03) — never skip it
-- Do not jump to the close without delivering the value prop first
-- After any objection is handled, return to the value prop or close — don't drop the conversation
+- Responses: 1 to 2 sentences max — tight and natural
+- NEVER assume the caller's name — always ask
+- Use the caller's actual name naturally once collected
+- ALWAYS call save_call_log after every completed call — mandatory
+- Value proposition (Step 02) MUST be delivered before the close (Step 03) — for high-intent callers only
+- For transactional callers (just need info), skip Steps 02–03 and answer directly
+- After any objection is handled, return to the value prop or close
+- Never give legal or financial advice
+- Never make up property details — use the mock schedule above for demo purposes
 `.trim();
 }
 
 // ─── Tool Definition ──────────────────────────────────────
-function getSaveBookingTool() {
+function getSaveCallLogTool() {
   return {
     type: "function",
-    name: "save_refinance_booking",
+    name: "save_call_log",
     description:
-      "Saves refinance consultation booking details when a client agrees to a follow-up call or rate comparison. MUST be called whenever a client agrees to any next step.",
+      "Saves a structured call log entry after every completed call. MUST be called once intent is established and the call has reached a natural conclusion (booking made, info given, transferred, or escalated).",
     parameters: {
       type: "object",
       properties: {
-        name: {
+        caller_name: {
           type: "string",
-          description: "Client full name (collected in Step 01 of the call)",
+          description: "Full name of the caller",
         },
-        phone: {
+        caller_phone: {
           type: "string",
-          description: "Client phone number (if provided)",
+          description: "Caller's phone number (if provided)",
         },
-        email: {
+        caller_email: {
           type: "string",
-          description: "Client email address (if provided — required for rate comparison path)",
+          description: "Caller's email address (if provided)",
+        },
+        property_address: {
+          type: "string",
+          description: "Property address they asked about or want appraised/inspected",
+        },
+        intent_category: {
+          type: "string",
+          enum: [
+            "property_inquiry",
+            "inspection_booking",
+            "inspection_reschedule",
+            "rental_application_followup",
+            "tenant_inquiry",
+            "general_enquiry",
+            "directions_access",
+            "vendor_strata_partner",
+            "staff_transfer",
+            "owner_calling_pm",
+            "appraisal_booking",
+            "no_transcript_admin",
+          ],
+          description: "Classified intent of the call",
         },
         preferred_time: {
           type: "string",
-          description: "When they want the callback or agreed slot — e.g. 'Tuesday at 11am', 'Thursday at 2pm', or 'anytime Thursday afternoon'",
+          description: "Agreed appointment slot or preferred callback time — e.g. 'Tuesday at 11am', 'Saturday 10am'",
         },
-        interest_area: {
+        staff_requested: {
           type: "string",
-          description:
-            "What they are interested in: refinance, equity access, debt consolidation, rate comparison, investment loan, or other",
+          description: "Name of staff member requested (for transfers or callbacks)",
         },
-        current_situation: {
+        outcome: {
           type: "string",
-          description:
-            "Brief summary of their current loan situation or concern — e.g. 'on variable rate with ANZ, interested in saving on monthly repayments'",
+          enum: [
+            "inspection_booked",
+            "appraisal_booked",
+            "transferred",
+            "callback_scheduled",
+            "info_provided",
+            "market_update_sent",
+            "message_taken",
+            "escalated",
+            "sms_sent",
+          ],
+          description: "What happened at the end of the call",
         },
-        follow_up_type: {
+        ai_summary: {
           type: "string",
-          enum: ["call", "rate_comparison", "sms"],
-          description:
-            "Which path the client chose: 'call' (booked a slot), 'rate_comparison' (wants comparison emailed first), or 'sms' (just wants a text with details)",
+          description: "1–2 sentence summary of the call — e.g. 'Caller wants to sell in Sefton, booked appraisal Tuesday 11am'",
+        },
+        sentiment: {
+          type: "string",
+          enum: ["positive", "neutral", "negative"],
+          description: "Overall sentiment of the caller during the call",
+        },
+        confidence_score: {
+          type: "number",
+          description: "AI confidence score for this call, from 0.0 (very unsure) to 1.0 (fully confident)",
+        },
+        escalated: {
+          type: "boolean",
+          description: "True if the call was escalated to a human team member",
         },
       },
-      required: ["name", "preferred_time", "interest_area", "follow_up_type"],
+      required: ["caller_name", "intent_category", "outcome"],
     },
   };
 }
@@ -300,10 +485,10 @@ function getSaveBookingTool() {
 class ConversationRecorder {
   constructor(sessionId) {
     this.sessionId = sessionId;
-    this.userChunks = [];     // PCM16 buffers from user mic (24kHz)
-    this.agentChunks = [];    // PCM16 buffers from ElevenLabs (16kHz)
+    this.userChunks = [];
+    this.agentChunks = [];
     this.startTime = Date.now();
-    this.events = [];         // Timeline of who spoke when
+    this.events = [];
   }
 
   addUserAudio(base64Pcm16) {
@@ -318,14 +503,12 @@ class ConversationRecorder {
     this.events.push({ type: "agent", time: Date.now() - this.startTime, bytes: buf.length });
   }
 
-  // Resample PCM16 from srcRate to dstRate using linear interpolation
   _resample(pcmBuffer, srcRate, dstRate) {
     if (srcRate === dstRate) return pcmBuffer;
     const srcSamples = pcmBuffer.length / 2;
     const ratio = srcRate / dstRate;
     const dstSamples = Math.floor(srcSamples / ratio);
     const out = Buffer.alloc(dstSamples * 2);
-
     for (let i = 0; i < dstSamples; i++) {
       const srcIdx = i * ratio;
       const lo = Math.floor(srcIdx);
@@ -339,18 +522,15 @@ class ConversationRecorder {
     return out;
   }
 
-  // Mix user (24kHz) and agent (16kHz) into a single mono WAV at 24kHz
   saveToFile() {
     const OUTPUT_RATE = 24000;
     const userPcm = Buffer.concat(this.userChunks);
     const agentPcmRaw = Buffer.concat(this.agentChunks);
     const agentPcm = this._resample(agentPcmRaw, 16000, OUTPUT_RATE);
-
     const userSamples = userPcm.length / 2;
     const agentSamples = agentPcm.length / 2;
     const totalSamples = Math.max(userSamples, agentSamples);
     const mixedBuf = Buffer.alloc(totalSamples * 2);
-
     for (let i = 0; i < totalSamples; i++) {
       let val = 0;
       if (i < userSamples) val += userPcm.readInt16LE(i * 2);
@@ -358,31 +538,26 @@ class ConversationRecorder {
       val = Math.max(-32768, Math.min(32767, val));
       mixedBuf.writeInt16LE(val, i * 2);
     }
-
-    // Build WAV header
     const wavHeader = Buffer.alloc(44);
     const dataSize = mixedBuf.length;
     const fileSize = 36 + dataSize;
-
     wavHeader.write("RIFF", 0);
     wavHeader.writeUInt32LE(fileSize, 4);
     wavHeader.write("WAVE", 8);
     wavHeader.write("fmt ", 12);
     wavHeader.writeUInt32LE(16, 16);
-    wavHeader.writeUInt16LE(1, 20);        // PCM format
-    wavHeader.writeUInt16LE(1, 22);        // mono
+    wavHeader.writeUInt16LE(1, 20);
+    wavHeader.writeUInt16LE(1, 22);
     wavHeader.writeUInt32LE(OUTPUT_RATE, 24);
     wavHeader.writeUInt32LE(OUTPUT_RATE * 2, 28);
     wavHeader.writeUInt16LE(2, 32);
     wavHeader.writeUInt16LE(16, 34);
     wavHeader.write("data", 36);
     wavHeader.writeUInt32LE(dataSize, 40);
-
     const wav = Buffer.concat([wavHeader, mixedBuf]);
     const filename = `call_${this.sessionId}_${Date.now()}.wav`;
     const filepath = path.join(RECORDINGS_DIR, filename);
     fs.writeFileSync(filepath, wav);
-
     console.log(`[Recording] Saved: ${filepath} (${(wav.length / 1024 / 1024).toFixed(2)} MB)`);
     return { filename, filepath, sizeMB: (wav.length / 1024 / 1024).toFixed(2) };
   }
@@ -391,7 +566,6 @@ class ConversationRecorder {
 // ============================================================
 // VOICE SERVICE — OpenAI Realtime + ElevenLabs
 // ============================================================
-
 function toFunctionCallPayload(value) {
   if (!value || typeof value !== "object") return null;
   if (value.type !== "function_call") return null;
@@ -434,7 +608,7 @@ function createRealtimeSession(sessionId, onEvent) {
               prefix_padding_ms: 300,
               silence_duration_ms: 2000,
             },
-            tools: [getSaveBookingTool()],
+            tools: [getSaveCallLogTool()],
             tool_choice: "auto",
           },
         })
@@ -455,7 +629,7 @@ function createRealtimeSession(sessionId, onEvent) {
         firstAudioDeltaLogged: false,
         processedCallIds: new Set(),
         recorder: new ConversationRecorder(sessionId),
-        bookings: [],
+        callLogs: [],
       };
 
       sessions.set(sessionId, session);
@@ -611,7 +785,7 @@ async function handleFunctionCall(sessionId, event) {
   const session = sessions.get(sessionId);
   if (!session) return;
 
-  if (event.name === "save_refinance_booking") {
+  if (event.name === "save_call_log") {
     const callId = typeof event.call_id === "string" ? event.call_id : null;
 
     // Deduplication
@@ -620,29 +794,36 @@ async function handleFunctionCall(sessionId, event) {
 
     try {
       const args = JSON.parse(event.arguments);
-      console.log(`[${sessionId}] Saving booking for: ${args.name} | type: ${args.follow_up_type} | time: ${args.preferred_time}`);
+      console.log(
+        `[${sessionId}] Saving call log | name: ${args.caller_name} | intent: ${args.intent_category} | outcome: ${args.outcome}`
+      );
 
-      const bookingId = uuidv4();
+      const logId = uuidv4();
 
       // ── Save to MongoDB ──────────────────────────────────
-      const booking = new Booking({
-        id: bookingId,
+      const callLog = new CallLog({
+        id: logId,
         sessionId,
-        name: args.name,
-        phone: args.phone || null,
-        email: args.email || null,
-        preferred_time: args.preferred_time,
-        interest_area: args.interest_area,
-        current_situation: args.current_situation || null,
-        follow_up_type: args.follow_up_type,
+        caller_name: args.caller_name || null,
+        caller_phone: args.caller_phone || null,
+        caller_email: args.caller_email || null,
+        property_address: args.property_address || null,
+        intent_category: args.intent_category,
+        preferred_time: args.preferred_time || null,
+        staff_requested: args.staff_requested || null,
+        outcome: args.outcome,
+        ai_summary: args.ai_summary || null,
+        sentiment: args.sentiment || "neutral",
+        confidence_score: args.confidence_score || null,
+        escalated: args.escalated || false,
       });
 
-      await booking.save();
+      await callLog.save();
       // ────────────────────────────────────────────────────
 
-      session.bookings.push({ id: bookingId, ...args });
+      session.callLogs.push({ id: logId, ...args });
 
-      console.log(`[${sessionId}] Booking saved to MongoDB: ${bookingId}`);
+      console.log(`[${sessionId}] Call log saved to MongoDB: ${logId}`);
 
       // Send success back to OpenAI so it can confirm to the caller
       session.ws.send(
@@ -653,18 +834,18 @@ async function handleFunctionCall(sessionId, event) {
             call_id: event.call_id,
             output: JSON.stringify({
               success: true,
-              message: "Booking saved successfully.",
-              booking_id: bookingId,
-              follow_up_type: args.follow_up_type,
+              message: "Call log saved successfully.",
+              log_id: logId,
+              outcome: args.outcome,
             }),
           },
         })
       );
       session.ws.send(JSON.stringify({ type: "response.create" }));
-      session.onEvent({ type: "booking-saved", data: args });
+      session.onEvent({ type: "call-logged", data: args });
     } catch (err) {
       if (callId) session.processedCallIds.delete(callId);
-      console.error(`[${sessionId}] Save failed:`, err.message);
+      console.error(`[${sessionId}] Call log save failed:`, err.message);
     }
   }
 }
@@ -818,8 +999,8 @@ function buildEventForwarder(socket) {
       case "speech-started":
         socket.emit("speech-started", {});
         break;
-      case "booking-saved":
-        socket.emit("booking-saved", event.data);
+      case "call-logged":
+        socket.emit("call-logged", event.data);
         break;
       case "recording-saved":
         socket.emit("recording-saved", event.data);
@@ -902,17 +1083,30 @@ io.on("connection", (socket) => {
 
 // ─── REST API Endpoints ───────────────────────────────────
 
-// GET all bookings from MongoDB
-app.get("/api/bookings", async (req, res) => {
+// GET all call logs from MongoDB
+app.get("/api/call-logs", async (req, res) => {
   try {
-    const bookings = await Booking.find().sort({ createdAt: -1 }).lean();
-    res.json(bookings);
+    const logs = await CallLog.find().sort({ createdAt: -1 }).lean();
+    res.json(logs);
   } catch (err) {
-    console.error("Failed to fetch bookings:", err.message);
-    res.status(500).json({ error: "Failed to fetch bookings" });
+    console.error("Failed to fetch call logs:", err.message);
+    res.status(500).json({ error: "Failed to fetch call logs" });
   }
 });
 
+// GET call logs filtered by intent category
+app.get("/api/call-logs/category/:category", async (req, res) => {
+  try {
+    const logs = await CallLog.find({ intent_category: req.params.category })
+      .sort({ createdAt: -1 })
+      .lean();
+    res.json(logs);
+  } catch (err) {
+    res.status(500).json({ error: "Failed to fetch call logs" });
+  }
+});
+
+// GET recordings list
 app.get("/api/recordings", (req, res) => {
   const files = fs.readdirSync(RECORDINGS_DIR).filter((f) => f.endsWith(".wav"));
   res.json(
@@ -928,12 +1122,12 @@ app.get("/api/recordings", (req, res) => {
 server.listen(PORT, () => {
   console.log(`
 ╔══════════════════════════════════════════════════════════════╗
-║   SW Brokerage — Voice Agent Server (OmniSuiteAI)            ║
+║   Ray White Bankstown — AI Receptionist (OmniSuiteAI)        ║
 ║   Running on http://localhost:${PORT}                           ║
 ║                                                              ║
-║   Flow: Hook → Value Prop → Agentic Close                    ║
-║   Objections: Happy w/ bank | Rates same | Too much hassle   ║
-║   Fallback: SMS follow-up                                    ║
+║   Flow: Greeting → Value Prop → Agentic Close                ║
+║   Use Cases: Inspect · Appraise · Transfer · Tenant · Info   ║
+║   Escalation: Complaints · Legal · Abusive → Human           ║
 ║                                                              ║
 ║   OpenAI API Key: ${OPENAI_API_KEY ? "✓ Set" : "✗ Missing"}                             ║
 ║   ElevenLabs Key: ${ELEVENLABS_API_KEY ? "✓ Set" : "✗ Missing"}                             ║
