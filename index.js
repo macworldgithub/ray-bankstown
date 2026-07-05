@@ -17,6 +17,13 @@
 // const MONGODB_URI = process.env.MONGODB_URI;
 // const PREWARM_TTL_MS = 60_000;
 
+// // GA Realtime defaults
+// const OPENAI_REALTIME_MODEL = process.env.OPENAI_REALTIME_MODEL || "gpt-realtime-2";
+// const OPENAI_INPUT_SAMPLE_RATE = Number(process.env.OPENAI_INPUT_SAMPLE_RATE || 24000);
+// const OPENAI_VAD_THRESHOLD = Number(process.env.OPENAI_VAD_THRESHOLD || 0.8);
+// const OPENAI_VAD_PREFIX_PADDING_MS = Number(process.env.OPENAI_VAD_PREFIX_PADDING_MS || 300);
+// const OPENAI_VAD_SILENCE_DURATION_MS = Number(process.env.OPENAI_VAD_SILENCE_DURATION_MS || 2000);
+
 // // ─── MongoDB Connection ───────────────────────────────────
 // if (!MONGODB_URI) {
 //   console.error("❌  MONGODB_URI is not set in .env — call logs will NOT be saved.");
@@ -28,18 +35,15 @@
 // }
 
 // // ─── Call Log Schema / Model ──────────────────────────────
-// // Mirrors the Excel call log columns described in the scope document
 // const callLogSchema = new mongoose.Schema(
 //   {
 //     id: { type: String, required: true, unique: true },
 //     sessionId: { type: String, required: true },
 
-//     // Caller details
 //     caller_name: { type: String, default: null },
 //     caller_phone: { type: String, default: null },
 //     caller_email: { type: String, default: null },
 
-//     // Property / intent details
 //     property_address: { type: String, default: null },
 //     intent_category: {
 //       type: String,
@@ -60,7 +64,6 @@
 //       required: true,
 //     },
 
-//     // Booking / outcome
 //     preferred_time: { type: String, default: null },
 //     staff_requested: { type: String, default: null },
 //     outcome: {
@@ -79,20 +82,17 @@
 //       required: true,
 //     },
 
-//     // AI metadata
 //     ai_summary: { type: String, default: null },
 //     sentiment: { type: String, enum: ["positive", "neutral", "negative"], default: "neutral" },
 //     confidence_score: { type: Number, default: null },
 //     escalated: { type: Boolean, default: false },
 //   },
-//   {
-//     timestamps: true,
-//   }
+//   { timestamps: true }
 // );
 
 // const CallLog = mongoose.model("CallLog", callLogSchema);
 
-// // Ensure recordings directory exists
+// // ─── Ensure recordings directory exists ───────────────────
 // const RECORDINGS_DIR = path.join(__dirname, "recordings");
 // if (!fs.existsSync(RECORDINGS_DIR)) {
 //   fs.mkdirSync(RECORDINGS_DIR, { recursive: true });
@@ -112,10 +112,6 @@
 
 // // ============================================================
 // // SYSTEM PROMPT — Ray White Bankstown AI Receptionist
-// // Based on OmniSuiteAI Scope Document v1.0 (May 13, 2026)
-// // Flow: 01 Greeting → 02 Value Proposition → 03 Agentic Close
-// // Objections: Happy w/ agent | Just browsing online | No time
-// // Escalation: Complex/sensitive calls → warm handoff
 // // ============================================================
 // function getSystemPrompt() {
 //   return `
@@ -216,12 +212,6 @@
 // Most of our clients are getting strong results right now because of our local knowledge across Bankstown, Georges Hall, Chester Hill, and Wiley Park — plus access to thousands of active buyers and tenants on our database.
 // Whether you want a free appraisal, to book an inspection, or list your home, I can get you sorted right now — no waiting on hold or chasing emails."
 
-// Key elements and why they matter:
-// - "Whole team to every property" — differentiator from competitors
-// - Local suburb knowledge — builds credibility and trust
-// - Speed/convenience — AI handles this instantly
-// - "No waiting" — reassures caller they're getting efficient help right now
-
 // ─────────────────────────────────────────────
 // STEP 03 — AGENTIC / PROACTIVE CLOSE
 // ─────────────────────────────────────────────
@@ -241,12 +231,6 @@
 // "[Staff name] is available — I'll connect you now. One moment."
 // (If unavailable): "They're with a client right now. I can take a message and have them call you back, or I can book a specific callback time — which would you prefer?"
 
-// Core principles:
-// - Always proactive and assumptive — don't ask "Are you interested?"
-// - Always offer TWO clear options (reduces decision fatigue)
-// - Offer a low-friction alternative ("or I can send you info first")
-// - End with a clear question that prompts a yes/no or choice
-
 // ─────────────────────────────────────────────
 // STEP 04 — COLLECT DETAILS (when booking confirmed)
 // ─────────────────────────────────────────────
@@ -255,7 +239,7 @@
 // - Property address (if appraisal) or which property they want to inspect
 // - Preferred contact: phone or email
 // - Best time / confirmed slot
-// - Any specific concerns (e.g., "I want to know what the market's doing in Sefton")
+// - Any specific concerns
 
 // =============================================================
 // SPECIFIC USE CASES
@@ -291,7 +275,6 @@
 // ─────────────────────────────────────────────
 // If the caller asks for a specific staff member by name, respond immediately:
 // "Sure, let me put you through to [name] now."
-// (Simulate transfer — in live version this would trigger a warm handoff.)
 // If unavailable: offer message + callback. Always log with intent_category: "staff_transfer".
 
 // ─────────────────────────────────────────────
@@ -336,16 +319,15 @@
 // ─────────────────────────────────────────────
 // OBJECTION — Caller is not interested
 // ─────────────────────────────────────────────
-// Don't push. Offer SMS/info fallback:
 // "No dramas — would it be okay if I sent you a quick text with our details? That way you've got a direct line if anything changes."
 
 // =============================================================
 // ESCALATION — WHEN TO HAND OFF
 // =============================================================
 // ALWAYS escalate (and log escalated: true) for:
-// - Complaints or disputes — "I want to speak to the director about a serious matter"
-// - Legal or financial questions — "What does my lease say about..."
-// - Abusive or aggressive callers — de-escalate politely once, then: "I'm going to need to connect you with a senior team member — please hold."
+// - Complaints or disputes
+// - Legal or financial questions
+// - Abusive or aggressive callers
 // - Any situation where your confidence is low
 
 // Escalation script:
@@ -364,10 +346,10 @@
 // - property_address
 // - preferred_time
 // - staff_requested
-// - ai_summary (brief 1-line summary of what happened)
-// - sentiment (positive / neutral / negative — based on caller tone)
-// - confidence_score (0.0 to 1.0 — how confident the AI was in handling this call)
-// - escalated (true if handed off to human)
+// - ai_summary
+// - sentiment
+// - confidence_score
+// - escalated
 
 // Confirmation after logging (if booking was made):
 // "Perfect, [name] — I've got that locked in for you. You'll hear from the team [at preferred_time / shortly]. Is there anything else I can help with today?"
@@ -376,16 +358,14 @@
 // HARD RULES — NON-NEGOTIABLE
 // =============================================================
 // - Language: ENGLISH ONLY at all times
-// - ONE question at a time — never stack multiple questions
-// - Responses: 1 to 2 sentences max — tight and natural
-// - NEVER assume the caller's name — always ask
-// - Use the caller's actual name naturally once collected
-// - ALWAYS call save_call_log after every completed call — mandatory
-// - Value proposition (Step 02) MUST be delivered before the close (Step 03) — for high-intent callers only
-// - For transactional callers (just need info), skip Steps 02–03 and answer directly
-// - After any objection is handled, return to the value prop or close
+// - ONE question at a time
+// - Responses: 1 to 2 sentences max
+// - NEVER assume the caller's name
+// - ALWAYS call save_call_log after every completed call
+// - Value proposition must be delivered before the close for high-intent callers
+// - For transactional callers, skip the sales flow and answer directly
 // - Never give legal or financial advice
-// - Never make up property details — use the mock schedule above for demo purposes
+// - Never make up property details
 // `.trim();
 // }
 
@@ -399,22 +379,10 @@
 //     parameters: {
 //       type: "object",
 //       properties: {
-//         caller_name: {
-//           type: "string",
-//           description: "Full name of the caller",
-//         },
-//         caller_phone: {
-//           type: "string",
-//           description: "Caller's phone number (if provided)",
-//         },
-//         caller_email: {
-//           type: "string",
-//           description: "Caller's email address (if provided)",
-//         },
-//         property_address: {
-//           type: "string",
-//           description: "Property address they asked about or want appraised/inspected",
-//         },
+//         caller_name: { type: "string", description: "Full name of the caller" },
+//         caller_phone: { type: "string", description: "Caller's phone number (if provided)" },
+//         caller_email: { type: "string", description: "Caller's email address (if provided)" },
+//         property_address: { type: "string", description: "Property address they asked about or want appraised/inspected" },
 //         intent_category: {
 //           type: "string",
 //           enum: [
@@ -437,10 +405,7 @@
 //           type: "string",
 //           description: "Agreed appointment slot or preferred callback time — e.g. 'Tuesday at 11am', 'Saturday 10am'",
 //         },
-//         staff_requested: {
-//           type: "string",
-//           description: "Name of staff member requested (for transfers or callbacks)",
-//         },
+//         staff_requested: { type: "string", description: "Name of staff member requested" },
 //         outcome: {
 //           type: "string",
 //           enum: [
@@ -456,10 +421,7 @@
 //           ],
 //           description: "What happened at the end of the call",
 //         },
-//         ai_summary: {
-//           type: "string",
-//           description: "1–2 sentence summary of the call — e.g. 'Caller wants to sell in Sefton, booked appraisal Tuesday 11am'",
-//         },
+//         ai_summary: { type: "string", description: "1–2 sentence summary of the call" },
 //         sentiment: {
 //           type: "string",
 //           enum: ["positive", "neutral", "negative"],
@@ -467,21 +429,16 @@
 //         },
 //         confidence_score: {
 //           type: "number",
-//           description: "AI confidence score for this call, from 0.0 (very unsure) to 1.0 (fully confident)",
+//           description: "AI confidence score for this call, from 0.0 to 1.0",
 //         },
-//         escalated: {
-//           type: "boolean",
-//           description: "True if the call was escalated to a human team member",
-//         },
+//         escalated: { type: "boolean", description: "True if the call was escalated to a human team member" },
 //       },
 //       required: ["caller_name", "intent_category", "outcome"],
 //     },
 //   };
 // }
 
-// // ============================================================
-// // RECORDING — WAV file builder for conversation audio
-// // ============================================================
+// // ─── Recording — WAV file builder for conversation audio ───
 // class ConversationRecorder {
 //   constructor(sessionId) {
 //     this.sessionId = sessionId;
@@ -509,6 +466,7 @@
 //     const ratio = srcRate / dstRate;
 //     const dstSamples = Math.floor(srcSamples / ratio);
 //     const out = Buffer.alloc(dstSamples * 2);
+
 //     for (let i = 0; i < dstSamples; i++) {
 //       const srcIdx = i * ratio;
 //       const lo = Math.floor(srcIdx);
@@ -527,10 +485,12 @@
 //     const userPcm = Buffer.concat(this.userChunks);
 //     const agentPcmRaw = Buffer.concat(this.agentChunks);
 //     const agentPcm = this._resample(agentPcmRaw, 16000, OUTPUT_RATE);
+
 //     const userSamples = userPcm.length / 2;
 //     const agentSamples = agentPcm.length / 2;
 //     const totalSamples = Math.max(userSamples, agentSamples);
 //     const mixedBuf = Buffer.alloc(totalSamples * 2);
+
 //     for (let i = 0; i < totalSamples; i++) {
 //       let val = 0;
 //       if (i < userSamples) val += userPcm.readInt16LE(i * 2);
@@ -538,9 +498,11 @@
 //       val = Math.max(-32768, Math.min(32767, val));
 //       mixedBuf.writeInt16LE(val, i * 2);
 //     }
+
 //     const wavHeader = Buffer.alloc(44);
 //     const dataSize = mixedBuf.length;
 //     const fileSize = 36 + dataSize;
+
 //     wavHeader.write("RIFF", 0);
 //     wavHeader.writeUInt32LE(fileSize, 4);
 //     wavHeader.write("WAVE", 8);
@@ -554,65 +516,111 @@
 //     wavHeader.writeUInt16LE(16, 34);
 //     wavHeader.write("data", 36);
 //     wavHeader.writeUInt32LE(dataSize, 40);
+
 //     const wav = Buffer.concat([wavHeader, mixedBuf]);
 //     const filename = `call_${this.sessionId}_${Date.now()}.wav`;
 //     const filepath = path.join(RECORDINGS_DIR, filename);
 //     fs.writeFileSync(filepath, wav);
+
 //     console.log(`[Recording] Saved: ${filepath} (${(wav.length / 1024 / 1024).toFixed(2)} MB)`);
 //     return { filename, filepath, sizeMB: (wav.length / 1024 / 1024).toFixed(2) };
 //   }
 // }
 
-// // ============================================================
-// // VOICE SERVICE — OpenAI Realtime + ElevenLabs
-// // ============================================================
+// // ─── Helpers ──────────────────────────────────────────────
+// function sendWsJson(ws, payload) {
+//   if (!ws || ws.readyState !== WebSocket.OPEN) return false;
+//   ws.send(JSON.stringify(payload));
+//   return true;
+// }
+
+// function safeJsonParse(text) {
+//   try {
+//     return JSON.parse(text);
+//   } catch {
+//     return null;
+//   }
+// }
+
 // function toFunctionCallPayload(value) {
 //   if (!value || typeof value !== "object") return null;
-//   if (value.type !== "function_call") return null;
+
 //   if (
-//     typeof value.name !== "string" ||
-//     typeof value.arguments !== "string" ||
-//     typeof value.call_id !== "string"
-//   )
-//     return null;
-//   return { name: value.name, arguments: value.arguments, call_id: value.call_id };
+//     value.type === "function_call" &&
+//     typeof value.name === "string" &&
+//     typeof value.arguments === "string" &&
+//     typeof value.call_id === "string"
+//   ) {
+//     return { name: value.name, arguments: value.arguments, call_id: value.call_id };
+//   }
+
+//   if (
+//     typeof value.name === "string" &&
+//     typeof value.arguments === "string" &&
+//     typeof value.call_id === "string"
+//   ) {
+//     return { name: value.name, arguments: value.arguments, call_id: value.call_id };
+//   }
+
+//   return null;
+// }
+
+// function extractFunctionCallsFromResponse(response) {
+//   const calls = [];
+//   const output = response?.output;
+
+//   if (Array.isArray(output)) {
+//     for (const item of output) {
+//       const fc = toFunctionCallPayload(item);
+//       if (fc) calls.push(fc);
+//     }
+//   }
+
+//   return calls;
 // }
 
 // // ─── Create OpenAI Realtime Session ───────────────────────
 // function createRealtimeSession(sessionId, onEvent) {
-//   const model = "gpt-4o-mini-realtime-preview";
-//   const url = `wss://api.openai.com/v1/realtime?model=${model}`;
+//   const url = `wss://api.openai.com/v1/realtime?model=${OPENAI_REALTIME_MODEL}`;
 //   const startMs = Date.now();
 
 //   return new Promise((resolve, reject) => {
 //     const ws = new WebSocket(url, {
 //       headers: {
 //         Authorization: `Bearer ${OPENAI_API_KEY}`,
-//         "OpenAI-Beta": "realtime=v1",
 //       },
 //     });
 
 //     ws.on("open", () => {
 //       console.log(`[${sessionId}] OpenAI connected (${Date.now() - startMs}ms)`);
 
-//       ws.send(
-//         JSON.stringify({
-//           type: "session.update",
-//           session: {
-//             modalities: ["text"],
-//             instructions: getSystemPrompt(),
-//             input_audio_format: "pcm16",
-//             turn_detection: {
-//               type: "server_vad",
-//               threshold: 0.8,
-//               prefix_padding_ms: 300,
-//               silence_duration_ms: 2000,
+//       const sessionUpdate = {
+//         type: "session.update",
+//         session: {
+//           type: "realtime",
+//           model: OPENAI_REALTIME_MODEL,
+//           output_modalities: ["text"],
+//           audio: {
+//             input: {
+//               format: {
+//                 type: "audio/pcm",
+//                 rate: OPENAI_INPUT_SAMPLE_RATE,
+//               },
+//               turn_detection: {
+//                 type: "server_vad",
+//                 threshold: OPENAI_VAD_THRESHOLD,
+//                 prefix_padding_ms: OPENAI_VAD_PREFIX_PADDING_MS,
+//                 silence_duration_ms: OPENAI_VAD_SILENCE_DURATION_MS,
+//               },
 //             },
-//             tools: [getSaveCallLogTool()],
-//             tool_choice: "auto",
 //           },
-//         })
-//       );
+//           instructions: getSystemPrompt(),
+//           tools: [getSaveCallLogTool()],
+//           tool_choice: "auto",
+//         },
+//       };
+
+//       sendWsJson(ws, sessionUpdate);
 
 //       const session = {
 //         ws,
@@ -652,7 +660,7 @@
 //       reject(err);
 //     });
 
-//     ws.on("close", (code, reason) => {
+//     ws.on("close", (code) => {
 //       console.log(`[${sessionId}] OpenAI WS closed: ${code}`);
 //       closeElevenLabsWs(sessionId);
 //       sessions.delete(sessionId);
@@ -665,19 +673,19 @@
 // function sendAudio(sessionId, base64Audio) {
 //   const session = sessions.get(sessionId);
 //   if (!session) return;
+
 //   session.recorder.addUserAudio(base64Audio);
-//   session.ws.send(
-//     JSON.stringify({ type: "input_audio_buffer.append", audio: base64Audio })
-//   );
+//   sendWsJson(session.ws, { type: "input_audio_buffer.append", audio: base64Audio });
 // }
 
 // // ─── Trigger greeting ─────────────────────────────────────
 // function triggerGreeting(sessionId) {
 //   const session = sessions.get(sessionId);
 //   if (!session) return;
+
 //   session.greetingTriggeredMs = Date.now();
 //   console.log(`[${sessionId}] Greeting triggered (${session.greetingTriggeredMs - session.startMs}ms)`);
-//   session.ws.send(JSON.stringify({ type: "response.create" }));
+//   sendWsJson(session.ws, { type: "response.create" });
 // }
 
 // // ─── ElevenLabs TTS Stream ────────────────────────────────
@@ -732,7 +740,7 @@
 //         session.recorder.addAgentAudio(msg.audio);
 //         session.onEvent({ type: "audio-delta", delta: msg.audio });
 //       }
-//     } catch (err) {}
+//     } catch {}
 //   });
 
 //   elWs.on("error", (err) => {
@@ -751,9 +759,9 @@
 // function sendTextToElevenLabs(sessionId, text) {
 //   const session = sessions.get(sessionId);
 //   if (session?.elevenLabsWs?.readyState === WebSocket.OPEN) {
-//     session.elevenLabsWs.send(
-//       JSON.stringify({ text, try_trigger_generation: true })
-//     );
+//     session.elevenLabsWs.send(JSON.stringify({ text, try_trigger_generation: true }));
+//   } else if (session) {
+//     session.textBuffer.push(text);
 //   }
 // }
 
@@ -773,7 +781,7 @@
 //       } else if (session.elevenLabsWs.readyState === WebSocket.OPEN) {
 //         session.elevenLabsWs.close();
 //       }
-//     } catch (err) {}
+//     } catch {}
 //     session.elevenLabsWs = null;
 //     session.elevenLabsReady = false;
 //     session.textBuffer = [];
@@ -781,72 +789,70 @@
 // }
 
 // // ─── Handle function calls from OpenAI ────────────────────
-// async function handleFunctionCall(sessionId, event) {
+// async function handleFunctionCall(sessionId, eventOrItem) {
 //   const session = sessions.get(sessionId);
 //   if (!session) return;
 
-//   if (event.name === "save_call_log") {
-//     const callId = typeof event.call_id === "string" ? event.call_id : null;
+//   const call = toFunctionCallPayload(eventOrItem);
+//   if (!call) return;
 
-//     // Deduplication
-//     if (callId && session.processedCallIds.has(callId)) return;
-//     if (callId) session.processedCallIds.add(callId);
+//   if (call.name !== "save_call_log") return;
 
-//     try {
-//       const args = JSON.parse(event.arguments);
-//       console.log(
-//         `[${sessionId}] Saving call log | name: ${args.caller_name} | intent: ${args.intent_category} | outcome: ${args.outcome}`
-//       );
+//   const callId = typeof call.call_id === "string" ? call.call_id : null;
 
-//       const logId = uuidv4();
+//   if (callId && session.processedCallIds.has(callId)) return;
+//   if (callId) session.processedCallIds.add(callId);
 
-//       // ── Save to MongoDB ──────────────────────────────────
-//       const callLog = new CallLog({
-//         id: logId,
-//         sessionId,
-//         caller_name: args.caller_name || null,
-//         caller_phone: args.caller_phone || null,
-//         caller_email: args.caller_email || null,
-//         property_address: args.property_address || null,
-//         intent_category: args.intent_category,
-//         preferred_time: args.preferred_time || null,
-//         staff_requested: args.staff_requested || null,
-//         outcome: args.outcome,
-//         ai_summary: args.ai_summary || null,
-//         sentiment: args.sentiment || "neutral",
-//         confidence_score: args.confidence_score || null,
-//         escalated: args.escalated || false,
-//       });
+//   try {
+//     const args = JSON.parse(call.arguments);
 
-//       await callLog.save();
-//       // ────────────────────────────────────────────────────
+//     console.log(
+//       `[${sessionId}] Saving call log | name: ${args.caller_name} | intent: ${args.intent_category} | outcome: ${args.outcome}`
+//     );
 
-//       session.callLogs.push({ id: logId, ...args });
+//     const logId = uuidv4();
 
-//       console.log(`[${sessionId}] Call log saved to MongoDB: ${logId}`);
+//     const callLog = new CallLog({
+//       id: logId,
+//       sessionId,
+//       caller_name: args.caller_name || null,
+//       caller_phone: args.caller_phone || null,
+//       caller_email: args.caller_email || null,
+//       property_address: args.property_address || null,
+//       intent_category: args.intent_category,
+//       preferred_time: args.preferred_time || null,
+//       staff_requested: args.staff_requested || null,
+//       outcome: args.outcome,
+//       ai_summary: args.ai_summary || null,
+//       sentiment: args.sentiment || "neutral",
+//       confidence_score: args.confidence_score || null,
+//       escalated: args.escalated || false,
+//     });
 
-//       // Send success back to OpenAI so it can confirm to the caller
-//       session.ws.send(
-//         JSON.stringify({
-//           type: "conversation.item.create",
-//           item: {
-//             type: "function_call_output",
-//             call_id: event.call_id,
-//             output: JSON.stringify({
-//               success: true,
-//               message: "Call log saved successfully.",
-//               log_id: logId,
-//               outcome: args.outcome,
-//             }),
-//           },
-//         })
-//       );
-//       session.ws.send(JSON.stringify({ type: "response.create" }));
-//       session.onEvent({ type: "call-logged", data: args });
-//     } catch (err) {
-//       if (callId) session.processedCallIds.delete(callId);
-//       console.error(`[${sessionId}] Call log save failed:`, err.message);
-//     }
+//     await callLog.save();
+//     session.callLogs.push({ id: logId, ...args });
+
+//     console.log(`[${sessionId}] Call log saved to MongoDB: ${logId}`);
+
+//     sendWsJson(session.ws, {
+//       type: "conversation.item.create",
+//       item: {
+//         type: "function_call_output",
+//         call_id: call.call_id,
+//         output: JSON.stringify({
+//           success: true,
+//           message: "Call log saved successfully.",
+//           log_id: logId,
+//           outcome: args.outcome,
+//         }),
+//       },
+//     });
+
+//     sendWsJson(session.ws, { type: "response.create" });
+//     session.onEvent({ type: "call-logged", data: args });
+//   } catch (err) {
+//     if (callId) session.processedCallIds.delete(callId);
+//     console.error(`[${sessionId}] Call log save failed:`, err.message);
 //   }
 // }
 
@@ -856,6 +862,10 @@
 //   if (!session) return;
 
 //   switch (event.type) {
+//     case "session.created":
+//     case "session.updated":
+//       break;
+
 //     case "response.created":
 //       session.isResponseActive = true;
 //       if (!session.firstResponseCreatedMs) {
@@ -864,14 +874,13 @@
 //       openElevenLabsStream(sessionId);
 //       break;
 
-//     case "response.done":
-//       session.isResponseActive = false;
-//       if (Array.isArray(event.response?.output)) {
-//         for (const item of event.response.output) {
-//           const fc = toFunctionCallPayload(item);
-//           if (fc) await handleFunctionCall(sessionId, fc);
-//         }
+//     case "response.output_text.delta":
+//       if (session.elevenLabsReady) {
+//         sendTextToElevenLabs(sessionId, event.delta);
+//       } else {
+//         session.textBuffer.push(event.delta);
 //       }
+//       session.onEvent({ type: "transcript-delta", delta: event.delta });
 //       break;
 
 //     case "response.text.delta":
@@ -883,17 +892,41 @@
 //       session.onEvent({ type: "transcript-delta", delta: event.delta });
 //       break;
 
+//     case "response.output_text.done":
+//       flushElevenLabsStream(sessionId);
+//       session.onEvent({ type: "transcript-done", transcript: event.text });
+//       break;
+
 //     case "response.text.done":
 //       flushElevenLabsStream(sessionId);
 //       session.onEvent({ type: "transcript-done", transcript: event.text });
 //       break;
 
+//     case "response.done": {
+//       session.isResponseActive = false;
+
+//       const calls = extractFunctionCallsFromResponse(event.response);
+//       for (const fc of calls) {
+//         await handleFunctionCall(sessionId, fc);
+//       }
+//       break;
+//     }
+
+//     case "response.output_item.done":
+//       if (event.item) {
+//         const fc = toFunctionCallPayload(event.item);
+//         if (fc) await handleFunctionCall(sessionId, fc);
+//       }
+//       break;
+
+//     case "response.function_call_arguments.done":
+//       await handleFunctionCall(sessionId, event);
+//       break;
+
 //     case "input_audio_buffer.speech_started":
 //       console.log(`[${sessionId}] User interrupted — stopping AI voice`);
 //       if (session.isResponseActive) {
-//         try {
-//           session.ws.send(JSON.stringify({ type: "response.cancel" }));
-//         } catch (err) {}
+//         sendWsJson(session.ws, { type: "response.cancel" });
 //       }
 //       closeElevenLabsWs(sessionId);
 //       openElevenLabsStream(sessionId, true);
@@ -904,19 +937,12 @@
 //       session.onEvent({ type: "user-transcript", transcript: event.transcript });
 //       break;
 
-//     case "response.function_call_arguments.done":
-//       await handleFunctionCall(sessionId, event);
-//       break;
-
-//     case "response.output_item.done":
-//       if (event.item) {
-//         const fc = toFunctionCallPayload(event.item);
-//         if (fc) await handleFunctionCall(sessionId, fc);
-//       }
-//       break;
-
 //     case "error":
 //       console.error(`[${sessionId}] OpenAI error:`, JSON.stringify(event.error));
+//       session.onEvent({ type: "error", error: event.error });
+//       break;
+
+//     default:
 //       break;
 //   }
 // }
@@ -937,7 +963,9 @@
 //     }
 
 //     closeElevenLabsWs(sessionId);
-//     try { session.ws.close(); } catch (e) {}
+//     try {
+//       session.ws.close();
+//     } catch {}
 //     sessions.delete(sessionId);
 //     console.log(`[${sessionId}] Session closed`);
 //   }
@@ -1011,6 +1039,8 @@
 //       case "session-closed":
 //         socket.emit("session-closed", {});
 //         break;
+//       default:
+//         break;
 //     }
 //   };
 // }
@@ -1023,7 +1053,6 @@
 
 //   const forwarder = buildEventForwarder(socket);
 
-//   // Prewarm on connect
 //   startPrewarm(socket.id, forwarder).catch(() => {});
 
 //   socket.on("start-session", async () => {
@@ -1051,7 +1080,6 @@
 //         clearPrewarmState(sessionId);
 //       }
 
-//       // Fallback: create directly
 //       await createRealtimeSession(sessionId, forwarder);
 //       socket.emit("session-started", { sessionId });
 //       triggerGreeting(sessionId);
@@ -1064,7 +1092,9 @@
 //   });
 
 //   socket.on("audio-chunk", (data) => {
-//     sendAudio(socket.id, data.audio);
+//     if (data?.audio) {
+//       sendAudio(socket.id, data.audio);
+//     }
 //   });
 
 //   socket.on("end-session", () => {
@@ -1082,8 +1112,6 @@
 // });
 
 // // ─── REST API Endpoints ───────────────────────────────────
-
-// // GET all call logs from MongoDB
 // app.get("/api/call-logs", async (req, res) => {
 //   try {
 //     const logs = await CallLog.find().sort({ createdAt: -1 }).lean();
@@ -1094,7 +1122,6 @@
 //   }
 // });
 
-// // GET call logs filtered by intent category
 // app.get("/api/call-logs/category/:category", async (req, res) => {
 //   try {
 //     const logs = await CallLog.find({ intent_category: req.params.category })
@@ -1106,7 +1133,6 @@
 //   }
 // });
 
-// // GET recordings list
 // app.get("/api/recordings", (req, res) => {
 //   const files = fs.readdirSync(RECORDINGS_DIR).filter((f) => f.endsWith(".wav"));
 //   res.json(
@@ -1123,7 +1149,7 @@
 //   console.log(`
 // ╔══════════════════════════════════════════════════════════════╗
 // ║   Ray White Bankstown — AI Receptionist (OmniSuiteAI)        ║
-// ║   Running on http://localhost:${PORT}                           ║
+// ║   Running on http://localhost:${PORT}                         ║
 // ║                                                              ║
 // ║   Flow: Greeting → Value Prop → Agentic Close                ║
 // ║   Use Cases: Inspect · Appraise · Transfer · Tenant · Info   ║
@@ -1131,9 +1157,9 @@
 // ║                                                              ║
 // ║   OpenAI API Key: ${OPENAI_API_KEY ? "✓ Set" : "✗ Missing"}                             ║
 // ║   ElevenLabs Key: ${ELEVENLABS_API_KEY ? "✓ Set" : "✗ Missing"}                             ║
-// ║   Voice ID:       ${ELEVENLABS_VOICE_ID}              ║
-// ║   Recordings Dir: ${RECORDINGS_DIR}    ║
-// ║   MongoDB:        ${MONGODB_URI ? "✓ Set" : "✗ Missing"}                             ║
+// ║   Voice ID:       ${ELEVENLABS_VOICE_ID}                     ║
+// ║   Recordings Dir:  ${RECORDINGS_DIR}                         ║
+// ║   MongoDB:         ${MONGODB_URI ? "✓ Set" : "✗ Missing"}                             ║
 // ╚══════════════════════════════════════════════════════════════╝
 //   `);
 // });
@@ -1431,6 +1457,79 @@ USE CASE: RENTAL APPLICATION FOLLOW-UP
 Log and route to appropriate PM.
 
 ─────────────────────────────────────────────
+USE CASE: PROPERTY LEASING ENQUIRIES (available rental listings)
+─────────────────────────────────────────────
+Callers frequently ask about specific rental listings. Answer using details from
+raywhitebankstown.com.au for the property in question. NEVER invent or guess a
+figure or feature you don't actually know — if you don't have the detail on hand,
+be upfront and offer to have the property manager confirm and call/text them back.
+
+Typical questions this covers, all answered directly and efficiently (no need for
+the full sales flow — these are transactional):
+- Is the property still available
+- What is the weekly or monthly rent
+- How much is the bond / security deposit
+- How many bedrooms and bathrooms it has
+- Whether there's a garage, carport, or allocated parking
+- Whether it has air conditioning, heating, or ceiling fans
+- Whether there's a yard, balcony, or outdoor space
+- Whether there are built-in wardrobes or extra storage
+- Whether there's a dishwasher or laundry
+- Proximity to public transport
+- Nearby schools, shops, or parks
+- When the next inspection is
+
+Log these under intent_category: "property_inquiry" (or "inspection_booking" /
+"inspection_reschedule" if it moves to booking a time).
+
+─────────────────────────────────────────────
+USE CASE: RENTAL PROCESS / APPLICATION FAQs
+─────────────────────────────────────────────
+Use discretion adapting tone, but keep the substance of these answers accurate:
+
+- "Are pets allowed?"
+  "Any pet request is reviewed as part of the application. If you'd like to apply, head to our website, find the property, and select 'Apply for this Property' — that'll take you through to Snug.com where you can create a login and submit your application."
+
+- "What lease lengths are available?"
+  "Lease terms are usually 6 or 12 months, though it can depend on the application — if a property has a shorter lease available, it'll be noted in the ad."
+
+- "Is the lease renewable?"
+  "In most cases, yes — though that depends on the individual property and the owner's plans when the lease is due to expire."
+
+- "Is there flexibility with the move-in date?"
+  "That can be reviewed as part of the application."
+
+- "Do I need to register for an inspection?"
+  "It's not essential, but it's definitely encouraged. To register, find the property on our website and select 'Apply for this Property' — that'll take you to Snug.com to create a login and register to attend."
+
+- "How do I apply?"
+  "Head to our website, find the property you're after, and select 'Apply for this Property'. You'll be redirected to Snug.com to create a login and submit your application there."
+
+- "What documents do I need?"
+  "That's all listed in Snug once you start your application — find the property on our website, select 'Apply for this Property', and Snug will show you everything required."
+
+- "What are the income or reference requirements?"
+  "That information's in Snug as well — same process: find the property on our website, select 'Apply for this Property', and Snug will list what's needed."
+
+- "How long does approval usually take?"
+  "Typically 1 to 3 days, depending on how many applications we're working through and whether any extra info is needed."
+
+Log rental-application FAQ calls under intent_category: "property_inquiry" or
+"rental_application_followup" as appropriate, with outcome: "info_provided"
+unless it progresses further (e.g. transferred, callback_scheduled).
+
+─────────────────────────────────────────────
+USE CASE: REQUESTS THAT GO BACK TO RECEPTION / PM
+─────────────────────────────────────────────
+- "Can I arrange a private viewing?"
+  Do NOT try to book this yourself — this goes to the relevant Property Manager.
+  "That's something our property management team can arrange directly for you —
+  let me take your details and get [PM name] to call you back, or I can put you
+  through now if they're free." Then follow the STAFF TRANSFER flow (offer
+  transfer now, or take a message/callback), and log as intent_category:
+  "staff_transfer" or "tenant_inquiry" with staff_requested set to the relevant PM.
+
+─────────────────────────────────────────────
 USE CASE: DIRECTIONS / OFFICE ACCESS
 ─────────────────────────────────────────────
 "We're at 362–364 Chapel Road, Bankstown — easy to find, right on the main road. Is there anything else I can help with?"
@@ -1505,6 +1604,8 @@ HARD RULES — NON-NEGOTIABLE
 - For transactional callers, skip the sales flow and answer directly
 - Never give legal or financial advice
 - Never make up property details
+- For rental listing questions, use only known/verified details from raywhitebankstown.com.au — if unsure, say so and offer a callback rather than guessing
+- Private viewing requests are always routed to Reception / the relevant Property Manager, not booked directly by you
 `.trim();
 }
 
