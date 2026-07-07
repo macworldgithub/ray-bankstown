@@ -3,31 +3,44 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SW Brokerage — Voice Agent</title>
+    <title>Ray White Bankstown — AI Receptionist</title>
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&display=swap" rel="stylesheet">
     <style>
         :root {
-            --clr-bg: #0a0e1a;
-            --clr-surface: rgba(16, 23, 42, 0.85);
-            --clr-surface-alt: rgba(22, 30, 52, 0.9);
-            --clr-border: rgba(99, 130, 255, 0.12);
-            --clr-accent: #5b7cfa;
-            --clr-accent-glow: rgba(91, 124, 250, 0.35);
-            --clr-accent-soft: rgba(91, 124, 250, 0.08);
+            /* Ray White brand palette */
+            --clr-rw-yellow: #FFD700;
+            --clr-rw-yellow-glow: rgba(255, 215, 0, 0.30);
+            --clr-rw-yellow-soft: rgba(255, 215, 0, 0.08);
+
+            --clr-bg: #0b0d0f;
+            --clr-surface: rgba(18, 20, 24, 0.90);
+            --clr-surface-alt: rgba(24, 27, 32, 0.95);
+            --clr-border: rgba(255, 215, 0, 0.10);
+            --clr-border-subtle: rgba(255, 255, 255, 0.06);
+
+            --clr-accent: #FFD700;
+            --clr-accent-glow: var(--clr-rw-yellow-glow);
+            --clr-accent-soft: var(--clr-rw-yellow-soft);
+
             --clr-green: #34d399;
-            --clr-green-glow: rgba(52, 211, 153, 0.3);
+            --clr-green-glow: rgba(52, 211, 153, 0.28);
             --clr-purple: #a78bfa;
-            --clr-purple-glow: rgba(167, 139, 250, 0.3);
+            --clr-purple-glow: rgba(167, 139, 250, 0.28);
             --clr-red: #f87171;
-            --clr-red-glow: rgba(248, 113, 113, 0.25);
+            --clr-red-glow: rgba(248, 113, 113, 0.22);
             --clr-amber: #fbbf24;
-            --clr-text: #e8ecf4;
-            --clr-text-dim: #7b8ba8;
-            --clr-text-faint: #4a5873;
-            --radius: 16px;
-            --radius-sm: 10px;
+            --clr-blue: #60a5fa;
+            --clr-blue-glow: rgba(96, 165, 250, 0.22);
+
+            --clr-text: #eef0f4;
+            --clr-text-dim: #7d8a9b;
+            --clr-text-faint: #454f5e;
+
+            --radius: 18px;
+            --radius-sm: 11px;
             --radius-pill: 999px;
             --font: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+            --transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
         *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
@@ -44,22 +57,22 @@
             overflow-x: hidden;
         }
 
-        /* Ambient background */
+        /* Ambient glows */
         body::before {
             content: '';
             position: fixed;
-            top: -40%; left: -20%;
-            width: 80vw; height: 80vw;
-            background: radial-gradient(circle, rgba(91, 124, 250, 0.06) 0%, transparent 70%);
+            top: -30%; left: -10%;
+            width: 70vw; height: 70vw;
+            background: radial-gradient(circle, rgba(255, 215, 0, 0.04) 0%, transparent 70%);
             pointer-events: none;
             z-index: 0;
         }
         body::after {
             content: '';
             position: fixed;
-            bottom: -30%; right: -15%;
-            width: 70vw; height: 70vw;
-            background: radial-gradient(circle, rgba(167, 139, 250, 0.05) 0%, transparent 70%);
+            bottom: -25%; right: -10%;
+            width: 60vw; height: 60vw;
+            background: radial-gradient(circle, rgba(255, 215, 0, 0.03) 0%, transparent 70%);
             pointer-events: none;
             z-index: 0;
         }
@@ -68,45 +81,66 @@
             position: relative;
             z-index: 1;
             width: 100%;
-            max-width: 460px;
+            max-width: 480px;
+            display: flex;
+            flex-direction: column;
+            gap: 0;
         }
 
         /* ─── Header ─── */
         .header {
             text-align: center;
-            margin-bottom: 32px;
+            margin-bottom: 28px;
         }
-        .logo-row {
+
+        .logo-wrap {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 14px;
+        }
+
+        /* Ray White "R|W" wordmark replica */
+        .rw-mark {
             display: flex;
             align-items: center;
-            justify-content: center;
-            gap: 10px;
-            margin-bottom: 6px;
+            gap: 0;
+            font-size: 1.15rem;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+            line-height: 1;
         }
-        .logo-dot {
-            width: 10px; height: 10px;
-            border-radius: 50%;
-            background: var(--clr-accent);
-            box-shadow: 0 0 10px var(--clr-accent-glow);
+        .rw-mark .r { color: #ffffff; }
+        .rw-mark .sep {
+            width: 2px;
+            height: 20px;
+            background: var(--clr-rw-yellow);
+            margin: 0 5px;
+            border-radius: 1px;
         }
-        .logo-text {
-            font-size: 0.7rem;
+        .rw-mark .w { color: var(--clr-rw-yellow); }
+
+        .agency-name {
+            font-size: 0.68rem;
             font-weight: 600;
             text-transform: uppercase;
             letter-spacing: 2.5px;
             color: var(--clr-text-dim);
         }
+
         h1 {
-            font-size: 1.65rem;
+            font-size: 1.55rem;
             font-weight: 700;
             letter-spacing: -0.3px;
             color: var(--clr-text);
-            margin-bottom: 4px;
+            margin-bottom: 5px;
+            line-height: 1.2;
         }
         .subtitle {
-            font-size: 0.82rem;
+            font-size: 0.81rem;
             color: var(--clr-text-dim);
             font-weight: 400;
+            line-height: 1.5;
         }
 
         /* ─── Card ─── */
@@ -114,29 +148,27 @@
             background: var(--clr-surface);
             border: 1px solid var(--clr-border);
             border-radius: var(--radius);
-            backdrop-filter: blur(20px);
-            padding: 36px 28px 28px;
+            backdrop-filter: blur(24px);
+            padding: 32px 28px 26px;
         }
 
         /* ─── Status Badge ─── */
         .status-badge {
-            display: inline-flex;
+            display: flex;
+            width: fit-content;
+            margin: 0 auto 26px;
             align-items: center;
-            gap: 6px;
-            padding: 5px 14px;
+            gap: 7px;
+            padding: 5px 16px;
             border-radius: var(--radius-pill);
-            font-size: 0.7rem;
+            font-size: 0.69rem;
             font-weight: 600;
-            letter-spacing: 0.5px;
+            letter-spacing: 0.6px;
             text-transform: uppercase;
             background: var(--clr-accent-soft);
             color: var(--clr-accent);
-            margin: 0 auto 28px;
-            display: flex;
-            width: fit-content;
-            margin-left: auto;
-            margin-right: auto;
-            transition: all 0.3s ease;
+            border: 1px solid rgba(255, 215, 0, 0.15);
+            transition: all var(--transition);
         }
         .status-badge .dot {
             width: 6px; height: 6px;
@@ -144,75 +176,128 @@
             background: currentColor;
         }
         .status-badge.active {
-            background: rgba(52, 211, 153, 0.1);
+            background: rgba(52, 211, 153, 0.09);
             color: var(--clr-green);
+            border-color: rgba(52, 211, 153, 0.2);
         }
         .status-badge.speaking {
-            background: rgba(167, 139, 250, 0.1);
+            background: rgba(167, 139, 250, 0.09);
             color: var(--clr-purple);
+            border-color: rgba(167, 139, 250, 0.2);
         }
         .status-badge.error {
-            background: rgba(248, 113, 113, 0.1);
+            background: rgba(248, 113, 113, 0.09);
             color: var(--clr-red);
+            border-color: rgba(248, 113, 113, 0.2);
+        }
+        .status-badge.escalated {
+            background: rgba(251, 191, 36, 0.09);
+            color: var(--clr-amber);
+            border-color: rgba(251, 191, 36, 0.2);
+        }
+
+        /* ─── Timer ─── */
+        .timer {
+            text-align: center;
+            font-size: 0.74rem;
+            color: var(--clr-text-faint);
+            font-variant-numeric: tabular-nums;
+            letter-spacing: 1.5px;
+            margin-bottom: 8px;
         }
 
         /* ─── Orb ─── */
         .orb-wrap {
             display: flex;
             justify-content: center;
-            margin-bottom: 32px;
+            margin-bottom: 30px;
         }
         .orb {
-            width: 110px; height: 110px;
+            width: 116px; height: 116px;
             border-radius: 50%;
             position: relative;
             display: flex;
             align-items: center;
             justify-content: center;
-            background: linear-gradient(135deg, var(--clr-accent), #7c5cfc);
-            box-shadow: 0 0 40px var(--clr-accent-glow), inset 0 -4px 12px rgba(0,0,0,0.2);
+            background: linear-gradient(140deg, #2a2118, #1a1a1a);
+            box-shadow: 0 0 0 2px rgba(255,215,0,0.15), 0 8px 40px rgba(0,0,0,0.5);
             transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
-            cursor: default;
         }
+
+        /* Idle ring */
         .orb::before {
             content: '';
             position: absolute;
-            inset: -4px;
+            inset: -5px;
             border-radius: 50%;
-            border: 2px solid rgba(91, 124, 250, 0.25);
-            animation: orb-pulse 2.5s ease-in-out infinite;
+            border: 2px solid rgba(255, 215, 0, 0.18);
+            animation: orb-idle-pulse 3s ease-in-out infinite;
         }
+
+        /* Outer glow ring */
+        .orb::after {
+            content: '';
+            position: absolute;
+            inset: -12px;
+            border-radius: 50%;
+            border: 1px solid rgba(255, 215, 0, 0.07);
+        }
+
         .orb.listening {
-            background: linear-gradient(135deg, var(--clr-green), #2dd4a8);
-            box-shadow: 0 0 50px var(--clr-green-glow), inset 0 -4px 12px rgba(0,0,0,0.2);
+            background: linear-gradient(140deg, #0d2e20, #0f1f17);
+            box-shadow: 0 0 60px var(--clr-green-glow), 0 0 0 2px rgba(52,211,153,0.25), 0 8px 40px rgba(0,0,0,0.4);
         }
-        .orb.listening::before { border-color: rgba(52, 211, 153, 0.3); }
+        .orb.listening::before {
+            border-color: rgba(52, 211, 153, 0.3);
+            animation-duration: 1.8s;
+        }
         .orb.speaking {
-            background: linear-gradient(135deg, var(--clr-purple), #8b5cf6);
-            box-shadow: 0 0 50px var(--clr-purple-glow), inset 0 -4px 12px rgba(0,0,0,0.2);
+            background: linear-gradient(140deg, #1a1030, #140e28);
+            box-shadow: 0 0 60px var(--clr-purple-glow), 0 0 0 2px rgba(167,139,250,0.25), 0 8px 40px rgba(0,0,0,0.4);
         }
         .orb.speaking::before {
-            border-color: rgba(167, 139, 250, 0.3);
-            animation-duration: 1s;
+            border-color: rgba(167, 139, 250, 0.35);
+            animation-duration: 0.9s;
         }
 
-        @keyframes orb-pulse {
-            0%, 100% { transform: scale(1); opacity: 1; }
-            50% { transform: scale(1.25); opacity: 0; }
+        @keyframes orb-idle-pulse {
+            0%, 100% { transform: scale(1); opacity: 0.8; }
+            50% { transform: scale(1.2); opacity: 0; }
         }
 
-        .mic-icon {
-            width: 32px; height: 32px;
-            fill: rgba(255,255,255,0.9);
-            filter: drop-shadow(0 2px 4px rgba(0,0,0,0.2));
+        /* RW icon inside orb */
+        .orb-inner {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 3px;
         }
+        .orb-rw {
+            font-size: 1.35rem;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+            color: rgba(255,255,255,0.85);
+            line-height: 1;
+            transition: color var(--transition);
+        }
+        .orb-rw .w-part { color: var(--clr-rw-yellow); }
+        .orb-sub {
+            font-size: 0.52rem;
+            font-weight: 600;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            color: var(--clr-text-faint);
+            transition: color var(--transition);
+        }
+        .orb.listening .orb-sub,
+        .orb.speaking .orb-sub { color: var(--clr-text-dim); }
 
         /* ─── Buttons ─── */
         .controls {
             display: flex;
             flex-direction: column;
             gap: 10px;
-            margin-bottom: 24px;
+            margin-bottom: 22px;
         }
         .btn {
             padding: 13px 24px;
@@ -225,378 +310,608 @@
             transition: all 0.2s ease;
             letter-spacing: 0.2px;
         }
-        .btn:active { transform: scale(0.97); }
+        .btn:disabled { opacity: 0.55; cursor: not-allowed; transform: none !important; }
+        .btn:active:not(:disabled) { transform: scale(0.97); }
+
         .btn-primary {
-            background: var(--clr-accent);
-            color: #fff;
-            box-shadow: 0 4px 20px var(--clr-accent-glow);
+            background: var(--clr-rw-yellow);
+            color: #0b0d0f;
+            box-shadow: 0 4px 20px var(--clr-rw-yellow-glow);
         }
-        .btn-primary:hover { background: #4a6bf0; transform: translateY(-1px); }
+        .btn-primary:hover:not(:disabled) {
+            background: #ffe033;
+            transform: translateY(-1px);
+            box-shadow: 0 6px 28px var(--clr-rw-yellow-glow);
+        }
         .btn-danger {
-            background: var(--clr-red);
-            color: #fff;
-            box-shadow: 0 4px 16px var(--clr-red-glow);
+            background: rgba(248, 113, 113, 0.12);
+            color: var(--clr-red);
+            border: 1px solid rgba(248, 113, 113, 0.25);
         }
-        .btn-danger:hover { background: #ef5350; transform: translateY(-1px); }
+        .btn-danger:hover:not(:disabled) {
+            background: rgba(248, 113, 113, 0.2);
+            transform: translateY(-1px);
+        }
+
+        /* ─── Divider ─── */
+        .divider {
+            height: 1px;
+            background: var(--clr-border-subtle);
+            margin: 18px 0 16px;
+        }
 
         /* ─── Transcript Panels ─── */
         .panel-label {
-            font-size: 0.65rem;
+            font-size: 0.63rem;
             font-weight: 600;
             text-transform: uppercase;
-            letter-spacing: 1.5px;
+            letter-spacing: 1.8px;
             color: var(--clr-text-faint);
-            margin-top: 16px;
             margin-bottom: 6px;
         }
         .panel {
-            padding: 14px 16px;
+            padding: 13px 15px;
             border-radius: var(--radius-sm);
             background: var(--clr-surface-alt);
-            border: 1px solid var(--clr-border);
-            font-size: 0.84rem;
-            line-height: 1.6;
+            border: 1px solid var(--clr-border-subtle);
+            font-size: 0.83rem;
+            line-height: 1.65;
             color: var(--clr-text-dim);
             min-height: 44px;
-            transition: border-color 0.3s;
+            transition: border-color var(--transition);
+            margin-bottom: 12px;
         }
-        .panel.agent { border-left: 3px solid var(--clr-accent); }
-        .panel.user { border-left: 3px solid var(--clr-green); }
+        .panel.agent {
+            border-left: 3px solid var(--clr-rw-yellow);
+        }
+        .panel.user {
+            border-left: 3px solid var(--clr-green);
+        }
         .panel .active-text { color: var(--clr-text); }
 
-        /* ─── Booking + Recording Results ─── */
+        /* ─── Outcome / Call Log Card ─── */
         .result-card {
-            margin-top: 16px;
+            margin-top: 4px;
             padding: 14px 16px;
             border-radius: var(--radius-sm);
             font-size: 0.8rem;
-            line-height: 1.5;
+            line-height: 1.7;
         }
-        .result-card.booking {
-            background: rgba(52, 211, 153, 0.06);
-            border: 1px solid rgba(52, 211, 153, 0.2);
+        .result-card.call-log {
+            background: rgba(52, 211, 153, 0.05);
+            border: 1px solid rgba(52, 211, 153, 0.18);
             color: var(--clr-green);
         }
         .result-card.recording {
-            background: rgba(251, 191, 36, 0.06);
-            border: 1px solid rgba(251, 191, 36, 0.2);
+            background: rgba(251, 191, 36, 0.05);
+            border: 1px solid rgba(251, 191, 36, 0.18);
             color: var(--clr-amber);
         }
-        .result-card a {
-            color: inherit;
-            text-decoration: underline;
-            text-underline-offset: 2px;
+        .result-card.escalated-card {
+            background: rgba(248, 113, 113, 0.05);
+            border: 1px solid rgba(248, 113, 113, 0.18);
+            color: var(--clr-red);
+        }
+        .result-card.sms-card {
+            background: rgba(96, 165, 250, 0.05);
+            border: 1px solid rgba(96, 165, 250, 0.18);
+            color: var(--clr-blue);
         }
         .result-card strong { font-weight: 600; }
+        .result-card a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
 
-        .hidden { display: none !important; }
+        /* outcome pill */
+        .outcome-pill {
+            display: inline-block;
+            margin-top: 7px;
+            padding: 3px 11px;
+            border-radius: var(--radius-pill);
+            font-size: 0.68rem;
+            font-weight: 600;
+            letter-spacing: 0.4px;
+            text-transform: uppercase;
+            background: rgba(52, 211, 153, 0.13);
+            border: 1px solid rgba(52, 211, 153, 0.28);
+        }
+        .outcome-pill.escalated {
+            background: rgba(248, 113, 113, 0.13);
+            border-color: rgba(248, 113, 113, 0.28);
+            color: var(--clr-red);
+        }
 
-        /* ─── Timer ─── */
-        .timer {
-            text-align: center;
-            font-size: 0.75rem;
-            color: var(--clr-text-faint);
-            font-variant-numeric: tabular-nums;
-            margin-bottom: 8px;
-            letter-spacing: 1px;
+        /* sentiment dot */
+        .sentiment-dot {
+            display: inline-block;
+            width: 7px; height: 7px;
+            border-radius: 50%;
+            margin-right: 5px;
+            vertical-align: middle;
+        }
+        .sentiment-dot.positive { background: var(--clr-green); }
+        .sentiment-dot.neutral  { background: var(--clr-text-dim); }
+        .sentiment-dot.negative { background: var(--clr-red); }
+
+        /* ─── Staff badges (visual reference) ─── */
+        .staff-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-top: 14px;
+        }
+        .staff-badge {
+            padding: 4px 10px;
+            border-radius: var(--radius-pill);
+            font-size: 0.67rem;
+            font-weight: 500;
+            letter-spacing: 0.3px;
+            background: rgba(255,255,255,0.04);
+            border: 1px solid var(--clr-border-subtle);
+            color: var(--clr-text-dim);
         }
 
         /* ─── Footer ─── */
         .footer {
             text-align: center;
-            margin-top: 20px;
-            font-size: 0.68rem;
+            margin-top: 18px;
+            font-size: 0.67rem;
             color: var(--clr-text-faint);
             letter-spacing: 0.3px;
+            line-height: 1.8;
+        }
+        .footer a {
+            color: var(--clr-text-faint);
+            text-decoration: none;
+        }
+        .footer a:hover { color: var(--clr-text-dim); }
+
+        .hidden { display: none !important; }
+
+        /* ─── Scenario chips (demo helpers) ─── */
+        .scenarios-label {
+            font-size: 0.62rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1.8px;
+            color: var(--clr-text-faint);
+            margin-bottom: 8px;
+            margin-top: 16px;
+        }
+        .scenarios {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+        .scenario-chip {
+            padding: 5px 12px;
+            border-radius: var(--radius-pill);
+            font-size: 0.72rem;
+            font-weight: 500;
+            cursor: default;
+            background: rgba(255, 215, 0, 0.05);
+            border: 1px solid rgba(255, 215, 0, 0.12);
+            color: rgba(255, 215, 0, 0.55);
+            transition: all 0.2s;
         }
     </style>
 </head>
 <body>
-    <div class="app">
-        <div class="header">
-            <div class="logo-row">
-                <span class="logo-dot"></span>
-                <span class="logo-text">SW Brokerage</span>
+<div class="app">
+
+    <!-- Header -->
+    <div class="header">
+        <div class="logo-wrap">
+            <div class="rw-mark">
+                <span class="r">R</span>
+                <span class="sep"></span>
+                <span class="w">W</span>
             </div>
-            <h1>Refinance Voice Agent</h1>
-            <p class="subtitle">AI-powered outreach assistant</p>
+            <span class="agency-name">Ray White Bankstown</span>
         </div>
-
-        <div class="card">
-            <div id="status-badge" class="status-badge">
-                <span class="dot"></span>
-                <span id="status-text">Ready</span>
-            </div>
-
-            <div id="timer" class="timer hidden">00:00</div>
-
-            <div class="orb-wrap">
-                <div id="orb" class="orb">
-                    <svg class="mic-icon" viewBox="0 0 24 24">
-                        <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
-                        <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
-                    </svg>
-                </div>
-            </div>
-
-            <div class="controls">
-                <button id="start-btn" class="btn btn-primary">Start Conversation</button>
-                <button id="end-btn" class="btn btn-danger hidden">End Call</button>
-            </div>
-
-            <div id="agent-label" class="panel-label hidden">Agent</div>
-            <div id="agent-text" class="panel agent hidden"></div>
-
-            <div id="user-label" class="panel-label hidden">You</div>
-            <div id="transcript" class="panel user hidden"></div>
-
-            <div id="booking-result" class="result-card booking hidden"></div>
-            <div id="recording-result" class="result-card recording hidden"></div>
-        </div>
-
-        <div class="footer">Powered by OpenAI Realtime &middot; ElevenLabs Jason Pike Voice</div>
+        <h1>AI Receptionist</h1>
+        <p class="subtitle">Inspections &middot; Appraisals &middot; Transfers &middot; Enquiries</p>
     </div>
 
-    <script src="/socket.io/socket.io.js"></script>
-    <script>
-        const socket = io();
+    <!-- Main Card -->
+    <div class="card">
 
-        // ─── DOM ───
-        const orb          = document.getElementById('orb');
-        const startBtn     = document.getElementById('start-btn');
-        const endBtn       = document.getElementById('end-btn');
-        const agentText    = document.getElementById('agent-text');
-        const agentLabel   = document.getElementById('agent-label');
-        const transcript   = document.getElementById('transcript');
-        const userLabel    = document.getElementById('user-label');
-        const statusBadge  = document.getElementById('status-badge');
-        const statusText   = document.getElementById('status-text');
-        const timerEl      = document.getElementById('timer');
-        const bookingResult   = document.getElementById('booking-result');
-        const recordingResult = document.getElementById('recording-result');
+        <!-- Status -->
+        <div id="status-badge" class="status-badge">
+            <span class="dot"></span>
+            <span id="status-text">Ready to Answer</span>
+        </div>
 
-        let audioContext   = null;
-        let mediaStream    = null;
-        let workletNode    = null;
-        let isSessionActive = false;
-        let timerInterval  = null;
-        let callStartTime  = null;
+        <!-- Timer -->
+        <div id="timer" class="timer hidden">00:00</div>
 
-        // ─── Audio Playback ───
-        let playbackQueue = [];
-        let isPlaying     = false;
-        const CAPTURE_RATE  = 24000;
-        const PLAYBACK_RATE = 16000;
+        <!-- Orb -->
+        <div class="orb-wrap">
+            <div id="orb" class="orb">
+                <div class="orb-inner">
+                    <div class="orb-rw">R<span class="w-part">W</span></div>
+                    <div class="orb-sub">Bankstown</div>
+                </div>
+            </div>
+        </div>
 
-        function setOrb(state) {
-            orb.classList.remove('listening', 'speaking');
-            if (state) orb.classList.add(state);
-        }
+        <!-- Controls -->
+        <div class="controls">
+            <button id="start-btn" class="btn btn-primary">Answer Call</button>
+            <button id="end-btn" class="btn btn-danger hidden">End Call</button>
+        </div>
 
-        function setStatus(text, type) {
-            statusText.textContent = text;
-            statusBadge.classList.remove('active', 'speaking', 'error');
-            if (type) statusBadge.classList.add(type);
-        }
+        <!-- Demo scenarios hint -->
+        <!-- <div id="scenarios-wrap">
+            <div class="scenarios-label">Try saying...</div>
+            <div class="scenarios">
+                <span class="scenario-chip">I want to sell my place</span>
+                <span class="scenario-chip">What time is the open at 67 Jocelyn?</span>
+                <span class="scenario-chip">Can I speak to Farah?</span>
+                <span class="scenario-chip">I need to book an inspection</span>
+                <span class="scenario-chip">I'm a tenant with a maintenance issue</span>
+            </div>
+        </div> -->
 
-        function startTimer() {
-            callStartTime = Date.now();
-            timerEl.classList.remove('hidden');
-            timerInterval = setInterval(() => {
-                const elapsed = Math.floor((Date.now() - callStartTime) / 1000);
-                const m = String(Math.floor(elapsed / 60)).padStart(2, '0');
-                const s = String(elapsed % 60).padStart(2, '0');
-                timerEl.textContent = `${m}:${s}`;
-            }, 1000);
-        }
+        <div class="divider"></div>
 
-        function stopTimer() {
-            if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
-        }
+        <!-- Agent transcript -->
+        <div id="agent-label" class="panel-label hidden">Receptionist</div>
+        <div id="agent-text" class="panel agent hidden"></div>
 
-        // ─── Audio Playback ───
-        function queueAudioChunk(base64) {
-            const raw = atob(base64);
-            const bytes = new Uint8Array(raw.length);
-            for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
-            const pcm16 = new Int16Array(bytes.buffer);
-            const float32 = new Float32Array(pcm16.length);
-            for (let i = 0; i < pcm16.length; i++) float32[i] = pcm16[i] / 32768;
-            playbackQueue.push(float32);
-            if (!isPlaying) playNextChunk();
-        }
+        <!-- User transcript -->
+        <div id="user-label" class="panel-label hidden">You</div>
+        <div id="transcript" class="panel user hidden"></div>
 
-        function playNextChunk() {
-            if (playbackQueue.length === 0 || !audioContext) {
-                isPlaying = false;
-                setOrb('listening');
-                setStatus('Listening...', 'active');
-                return;
-            }
-            isPlaying = true;
-            setOrb('speaking');
-            setStatus('Agent speaking...', 'speaking');
+        <!-- Call log result -->
+        <div id="call-log-result" class="result-card call-log hidden"></div>
 
-            const samples = playbackQueue.shift();
-            const buffer = audioContext.createBuffer(1, samples.length, PLAYBACK_RATE);
-            buffer.copyToChannel(samples, 0);
-            const source = audioContext.createBufferSource();
-            source.buffer = buffer;
-            source.connect(audioContext.destination);
-            source.onended = () => playNextChunk();
-            source.start();
-        }
+        <!-- Escalation notice -->
+        <div id="escalation-result" class="result-card escalated-card hidden"></div>
 
-        function stopPlayback() {
-            playbackQueue = [];
+        <!-- SMS notice -->
+        <div id="sms-result" class="result-card sms-card hidden"></div>
+
+        <!-- Recording notice -->
+        <div id="recording-result" class="result-card recording hidden"></div>
+
+        <!-- Staff row -->
+        <!-- <div class="staff-row">
+            <span class="staff-badge">Tony Roumanous</span>
+            <span class="staff-badge">Charlie Sioud</span>
+            <span class="staff-badge">Farah Antone</span>
+            <span class="staff-badge">Michelle Clay</span>
+            <span class="staff-badge">Matthew Natoli</span>
+            <span class="staff-badge">Joshua Nassif</span>
+        </div> -->
+
+    </div><!-- /card -->
+
+    <!-- Footer -->
+    <div class="footer">
+        362–364 Chapel Road, Bankstown &middot; raywhitebankstown.com.au<br>
+        Powered by OpenAI Realtime &middot; ElevenLabs &middot;
+        Built by <a href="https://omnisuiteai.com" target="_blank">OmniSuiteAI</a>
+    </div>
+
+</div><!-- /app -->
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+    const socket = io();
+
+    // ─── DOM refs ───────────────────────────────────────────
+    const orb               = document.getElementById('orb');
+    const startBtn          = document.getElementById('start-btn');
+    const endBtn            = document.getElementById('end-btn');
+    const agentText         = document.getElementById('agent-text');
+    const agentLabel        = document.getElementById('agent-label');
+    const transcript        = document.getElementById('transcript');
+    const userLabel         = document.getElementById('user-label');
+    const statusBadge       = document.getElementById('status-badge');
+    const statusText        = document.getElementById('status-text');
+    const timerEl           = document.getElementById('timer');
+    const callLogResult     = document.getElementById('call-log-result');
+    const escalationResult  = document.getElementById('escalation-result');
+    const smsResult         = document.getElementById('sms-result');
+    const recordingResult   = document.getElementById('recording-result');
+    const scenariosWrap     = document.getElementById('scenarios-wrap');
+
+    let audioContext    = null;
+    let mediaStream     = null;
+    let workletNode     = null;
+    let isSessionActive = false;
+    let timerInterval   = null;
+    let callStartTime   = null;
+
+    // ─── Audio Playback ─────────────────────────────────────
+    let playbackQueue = [];
+    let isPlaying     = false;
+    const CAPTURE_RATE  = 24000;
+    const PLAYBACK_RATE = 16000;
+
+    function setOrb(state) {
+        orb.classList.remove('listening', 'speaking');
+        if (state) orb.classList.add(state);
+    }
+
+    function setStatus(text, type) {
+        statusText.textContent = text;
+        statusBadge.classList.remove('active', 'speaking', 'error', 'escalated');
+        if (type) statusBadge.classList.add(type);
+    }
+
+    function startTimer() {
+        callStartTime = Date.now();
+        timerEl.classList.remove('hidden');
+        timerInterval = setInterval(() => {
+            const elapsed = Math.floor((Date.now() - callStartTime) / 1000);
+            const m = String(Math.floor(elapsed / 60)).padStart(2, '0');
+            const s = String(elapsed % 60).padStart(2, '0');
+            timerEl.textContent = `${m}:${s}`;
+        }, 1000);
+    }
+
+    function stopTimer() {
+        if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
+    }
+
+    // ─── Audio Playback ─────────────────────────────────────
+    function queueAudioChunk(base64) {
+        const raw = atob(base64);
+        const bytes = new Uint8Array(raw.length);
+        for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
+        const pcm16  = new Int16Array(bytes.buffer);
+        const float32 = new Float32Array(pcm16.length);
+        for (let i = 0; i < pcm16.length; i++) float32[i] = pcm16[i] / 32768;
+        playbackQueue.push(float32);
+        if (!isPlaying) playNextChunk();
+    }
+
+    function playNextChunk() {
+        if (playbackQueue.length === 0 || !audioContext) {
             isPlaying = false;
-        }
-
-        // ─── Microphone Capture ───
-        async function startMicrophone() {
-            audioContext = new AudioContext({ sampleRate: CAPTURE_RATE });
-
-            const processorCode = `
-                class PCMProcessor extends AudioWorkletProcessor {
-                    process(inputs) {
-                        const input = inputs[0];
-                        if (input && input[0]) {
-                            const float32 = input[0];
-                            const pcm16 = new Int16Array(float32.length);
-                            for (let i = 0; i < float32.length; i++) {
-                                const s = Math.max(-1, Math.min(1, float32[i]));
-                                pcm16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
-                            }
-                            this.port.postMessage(pcm16.buffer, [pcm16.buffer]);
-                        }
-                        return true;
-                    }
-                }
-                registerProcessor('pcm-processor', PCMProcessor);
-            `;
-            const blob = new Blob([processorCode], { type: 'application/javascript' });
-            const url = URL.createObjectURL(blob);
-            await audioContext.audioWorklet.addModule(url);
-            URL.revokeObjectURL(url);
-
-            mediaStream = await navigator.mediaDevices.getUserMedia({
-                audio: {
-                    sampleRate: CAPTURE_RATE,
-                    channelCount: 1,
-                    echoCancellation: true,
-                    noiseSuppression: true,
-                    autoGainControl: true,
-                }
-            });
-
-            const source = audioContext.createMediaStreamSource(mediaStream);
-            workletNode = new AudioWorkletNode(audioContext, 'pcm-processor');
-            workletNode.port.onmessage = (e) => {
-                if (!isSessionActive) return;
-                const pcm16 = new Uint8Array(e.data);
-                let binary = '';
-                for (let i = 0; i < pcm16.length; i++) binary += String.fromCharCode(pcm16[i]);
-                socket.emit('audio-chunk', { audio: btoa(binary) });
-            };
-            source.connect(workletNode);
-            workletNode.connect(audioContext.destination);
-        }
-
-        function stopMicrophone() {
-            if (workletNode) { workletNode.disconnect(); workletNode = null; }
-            if (mediaStream) { mediaStream.getTracks().forEach(t => t.stop()); mediaStream = null; }
-            if (audioContext) { audioContext.close(); audioContext = null; }
-        }
-
-        // ─── Socket.IO Events ───
-        socket.on('connect', () => console.log('Connected'));
-
-        socket.on('session-started', (data) => {
-            setStatus('Connected — Listening...', 'active');
-            setOrb('listening');
-            startTimer();
-        });
-
-        socket.on('audio-delta', (data) => queueAudioChunk(data.delta));
-
-        let currentAgentText = '';
-        socket.on('transcript-delta', (data) => {
-            agentLabel.classList.remove('hidden');
-            agentText.classList.remove('hidden');
-            currentAgentText += data.delta;
-            agentText.innerHTML = `<span class="active-text">${currentAgentText}</span>`;
-        });
-
-        socket.on('transcript-done', () => { currentAgentText = ''; });
-
-        socket.on('user-transcript', (data) => {
-            userLabel.classList.remove('hidden');
-            transcript.classList.remove('hidden');
-            transcript.innerHTML = `<span class="active-text">${data.transcript}</span>`;
-        });
-
-        socket.on('speech-started', () => {
-            stopPlayback();
             setOrb('listening');
             setStatus('Listening...', 'active');
-            currentAgentText = '';
-        });
-
-        socket.on('booking-saved', (data) => {
-            bookingResult.classList.remove('hidden');
-            bookingResult.innerHTML = `
-                &#9989; <strong>Booking saved for ${data.name || 'Client'}</strong><br>
-                Interest: ${data.interest_area || '—'} &middot; Time: ${data.preferred_time || '—'}
-            `;
-        });
-
-        socket.on('recording-saved', (data) => {
-            recordingResult.classList.remove('hidden');
-            recordingResult.innerHTML = `
-                &#127908; <strong>Recording saved</strong><br>
-            `;
-        });
-
-        socket.on('realtime-error', (data) => {
-            console.error('Error:', data.error);
-            setStatus('Error: ' + (data.error?.message || 'Unknown'), 'error');
-        });
-
-        socket.on('session-closed', () => endSession());
-
-        // ─── Button Handlers ───
-        startBtn.onclick = async () => {
-            try {
-                startBtn.disabled = true;
-                setStatus('Connecting...', '');
-                await startMicrophone();
-                isSessionActive = true;
-                socket.emit('start-session');
-                startBtn.classList.add('hidden');
-                endBtn.classList.remove('hidden');
-            } catch (err) {
-                console.error('Start failed:', err);
-                setStatus('Microphone access denied', 'error');
-                startBtn.disabled = false;
-            }
-        };
-
-        endBtn.onclick = () => {
-            socket.emit('end-session');
-            endSession();
-        };
-
-        function endSession() {
-            isSessionActive = false;
-            stopPlayback();
-            stopMicrophone();
-            stopTimer();
-            startBtn.classList.remove('hidden');
-            startBtn.disabled = false;
-            endBtn.classList.add('hidden');
-            setOrb(null);
-            setStatus('Call ended', '');
+            return;
         }
-    </script>
+        isPlaying = true;
+        setOrb('speaking');
+        setStatus('Receptionist speaking...', 'speaking');
+
+        const samples = playbackQueue.shift();
+        const buffer  = audioContext.createBuffer(1, samples.length, PLAYBACK_RATE);
+        buffer.copyToChannel(samples, 0);
+        const source = audioContext.createBufferSource();
+        source.buffer = buffer;
+        source.connect(audioContext.destination);
+        source.onended = () => playNextChunk();
+        source.start();
+    }
+
+    function stopPlayback() {
+        playbackQueue = [];
+        isPlaying = false;
+    }
+
+    // ─── Microphone Capture ─────────────────────────────────
+    async function startMicrophone() {
+        audioContext = new AudioContext({ sampleRate: CAPTURE_RATE });
+
+        const processorCode = `
+            class PCMProcessor extends AudioWorkletProcessor {
+                process(inputs) {
+                    const input = inputs[0];
+                    if (input && input[0]) {
+                        const float32 = input[0];
+                        const pcm16 = new Int16Array(float32.length);
+                        for (let i = 0; i < float32.length; i++) {
+                            const s = Math.max(-1, Math.min(1, float32[i]));
+                            pcm16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+                        }
+                        this.port.postMessage(pcm16.buffer, [pcm16.buffer]);
+                    }
+                    return true;
+                }
+            }
+            registerProcessor('pcm-processor', PCMProcessor);
+        `;
+        const blob = new Blob([processorCode], { type: 'application/javascript' });
+        const url  = URL.createObjectURL(blob);
+        await audioContext.audioWorklet.addModule(url);
+        URL.revokeObjectURL(url);
+
+        mediaStream = await navigator.mediaDevices.getUserMedia({
+            audio: {
+                sampleRate: CAPTURE_RATE,
+                channelCount: 1,
+                echoCancellation: true,
+                noiseSuppression: true,
+                autoGainControl: true,
+            }
+        });
+
+        const source = audioContext.createMediaStreamSource(mediaStream);
+        workletNode  = new AudioWorkletNode(audioContext, 'pcm-processor');
+        workletNode.port.onmessage = (e) => {
+            if (!isSessionActive) return;
+            const pcm16  = new Uint8Array(e.data);
+            let binary = '';
+            for (let i = 0; i < pcm16.length; i++) binary += String.fromCharCode(pcm16[i]);
+            socket.emit('audio-chunk', { audio: btoa(binary) });
+        };
+        source.connect(workletNode);
+        workletNode.connect(audioContext.destination);
+    }
+
+    function stopMicrophone() {
+        if (workletNode)   { workletNode.disconnect(); workletNode = null; }
+        if (mediaStream)   { mediaStream.getTracks().forEach(t => t.stop()); mediaStream = null; }
+        if (audioContext)  { audioContext.close(); audioContext = null; }
+    }
+
+    // ─── Human-readable labels ──────────────────────────────
+    const intentLabels = {
+        property_inquiry:            '🏠 Property Inquiry',
+        inspection_booking:          '📅 Inspection Booking',
+        inspection_reschedule:       '🔄 Inspection Reschedule',
+        rental_application_followup: '📋 Rental Application Follow-Up',
+        tenant_inquiry:              '🔑 Tenant Inquiry',
+        general_enquiry:             '💬 General Enquiry',
+        directions_access:           '📍 Directions / Access',
+        vendor_strata_partner:       '🤝 Vendor / Strata',
+        staff_transfer:              '📞 Staff Transfer',
+        owner_calling_pm:            '👤 Owner → Property Manager',
+        appraisal_booking:           '💰 Free Appraisal Booked',
+        landlord_new_business:       '🏢 New Landlord Enquiry',
+        no_transcript_admin:         '⚙️ Admin / No Transcript',
+    };
+
+    const outcomeLabels = {
+        inspection_booked:    '✅ Inspection Booked',
+        appraisal_booked:     '✅ Appraisal Booked',
+        transferred:          '↗️ Transferred to Staff',
+        callback_scheduled:   '📞 Callback Scheduled',
+        info_provided:        'ℹ️ Info Provided',
+        market_update_sent:   '📊 Market Update Sent',
+        message_taken:        '📝 Message Taken',
+        escalated:            '⚠️ Escalated to Team',
+        sms_sent:             '💬 SMS Sent',
+    };
+
+    // ─── Socket Events ──────────────────────────────────────
+    socket.on('connect', () => console.log('Socket connected'));
+
+    socket.on('session-started', () => {
+        setStatus('Connected — Listening...', 'active');
+        setOrb('listening');
+        startTimer();
+        scenariosWrap.classList.add('hidden');
+    });
+
+    socket.on('audio-delta', (data) => queueAudioChunk(data.delta));
+
+    let currentAgentText = '';
+    socket.on('transcript-delta', (data) => {
+        agentLabel.classList.remove('hidden');
+        agentText.classList.remove('hidden');
+        currentAgentText += data.delta;
+        agentText.innerHTML = `<span class="active-text">${currentAgentText}</span>`;
+    });
+
+    socket.on('transcript-done', () => { currentAgentText = ''; });
+
+    socket.on('user-transcript', (data) => {
+        userLabel.classList.remove('hidden');
+        transcript.classList.remove('hidden');
+        transcript.innerHTML = `<span class="active-text">${data.transcript}</span>`;
+    });
+
+    socket.on('speech-started', () => {
+        stopPlayback();
+        setOrb('listening');
+        setStatus('Listening...', 'active');
+        currentAgentText = '';
+    });
+
+    socket.on('call-logged', (data) => {
+        // If escalated — show escalation card
+        if (data.escalated) {
+            escalationResult.classList.remove('hidden');
+            escalationResult.innerHTML = `
+                ⚠️ <strong>Escalated to team</strong><br>
+                ${data.ai_summary || 'Call requires human follow-up.'}
+                <br><span class="outcome-pill escalated">Escalated</span>
+            `;
+            setStatus('Escalated to team', 'escalated');
+        }
+
+        // Always show call log card
+        callLogResult.classList.remove('hidden');
+
+        const intentLabel  = intentLabels[data.intent_category] || data.intent_category || '—';
+        const outcomeLabel = outcomeLabels[data.outcome] || data.outcome || '—';
+        const sentimentDot = `<span class="sentiment-dot ${data.sentiment || 'neutral'}"></span>`;
+        const contactLine  = data.caller_email
+            ? `Email: ${data.caller_email}`
+            : data.caller_phone
+                ? `Phone: ${data.caller_phone}`
+                : '';
+        const propertyLine = data.property_address ? `Property: ${data.property_address}<br>` : '';
+        const timeLine     = data.preferred_time ? `Time: ${data.preferred_time}<br>` : '';
+        const staffLine    = data.staff_requested ? `Staff: ${data.staff_requested}<br>` : '';
+        const confScore    = data.confidence_score != null
+            ? ` &middot; Confidence: ${Math.round(data.confidence_score * 100)}%`
+            : '';
+        const summaryLine  = data.ai_summary ? `<br><em style="opacity:0.8">"${data.ai_summary}"</em>` : '';
+
+        callLogResult.innerHTML = `
+            ✅ <strong>Call logged — ${data.caller_name || 'Caller'}</strong><br>
+            ${intentLabel}<br>
+            ${propertyLine}${timeLine}${staffLine}
+            ${contactLine ? contactLine + '<br>' : ''}
+            ${sentimentDot}${(data.sentiment || 'neutral').charAt(0).toUpperCase() + (data.sentiment || 'neutral').slice(1)} sentiment${confScore}
+            ${summaryLine}
+            <br><span class="outcome-pill">${outcomeLabel}</span>
+        `;
+    });
+
+    socket.on('sms-sent', (data) => {
+        smsResult.classList.remove('hidden');
+        smsResult.innerHTML = data.success
+            ? `💬 <strong>Website link texted</strong><br>Sent to ${data.caller_phone || 'caller'}`
+            : `💬 <strong>Text could not be sent</strong><br>${data.caller_phone || 'caller'} — will need a manual follow-up`;
+    });
+
+    socket.on('recording-saved', (data) => {
+        recordingResult.classList.remove('hidden');
+        recordingResult.innerHTML = `🎙️ <strong>Call recorded</strong>`;
+    });
+
+    socket.on('realtime-error', (data) => {
+        console.error('Realtime error:', data.error);
+        setStatus('Error: ' + (data.error?.message || 'Unknown error'), 'error');
+    });
+
+    socket.on('session-closed', () => endSession());
+
+    // ─── Button Handlers ────────────────────────────────────
+    startBtn.onclick = async () => {
+        try {
+            startBtn.disabled = true;
+            setStatus('Connecting...', '');
+
+            await startMicrophone();
+
+            isSessionActive = true;
+            socket.emit('start-session');
+
+            startBtn.classList.add('hidden');
+            endBtn.classList.remove('hidden');
+        } catch (err) {
+            console.error('Start failed:', err);
+            setStatus('Microphone access denied', 'error');
+            startBtn.disabled = false;
+        }
+    };
+
+    endBtn.onclick = () => {
+        socket.emit('end-session');
+        endSession();
+    };
+
+    function endSession() {
+        isSessionActive = false;
+        stopPlayback();
+        stopMicrophone();
+        stopTimer();
+
+        startBtn.classList.remove('hidden');
+        startBtn.disabled = false;
+        endBtn.classList.add('hidden');
+
+        setOrb(null);
+        setStatus('Call ended', '');
+        scenariosWrap.classList.remove('hidden');
+    }
+</script>
 </body>
 </html>
