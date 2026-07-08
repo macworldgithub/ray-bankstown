@@ -2434,6 +2434,16 @@ const OPENAI_VAD_PREFIX_PADDING_MS = Number(process.env.OPENAI_VAD_PREFIX_PADDIN
 // something this app can fix — worth monitoring server-side round-trip logs if it recurs.
 const OPENAI_VAD_SILENCE_DURATION_MS = Number(process.env.OPENAI_VAD_SILENCE_DURATION_MS || 1100);
 
+// FIX — "Agent stops speaking after a few words": the mic (echoCancellation isn't 100%
+// reliable, especially over laptop speakers) frequently picks up the very start of the AI's
+// own voice and OpenAI's VAD reports that as the caller starting to talk. The old code treated
+// every "speech_started" event as a real barge-in and immediately cancelled the in-flight
+// response + tore down the TTS stream — cutting the agent off almost as soon as it began
+// speaking. We now ignore speech_started events that arrive within this grace window of a
+// response starting, since those are overwhelmingly likely to be the agent hearing itself
+// rather than a genuine interruption. Real barge-ins after the grace window still work as before.
+const BARGE_IN_GRACE_MS = Number(process.env.OPENAI_BARGE_IN_GRACE_MS || 700);
+
 // Agency website — used when texting callers a link (Action Log: "New enquiries — can we
 // text link to website?")
 const AGENCY_WEBSITE_URL = process.env.AGENCY_WEBSITE_URL || "https://raywhitebankstown.com.au";
@@ -3314,13 +3324,19 @@ function createRealtimeSession(sessionId, onEvent) {
         textBuffer: [],
         isResponseActive: false,
         // De-dupe fix (Action Log — "Voice Bot: when asking to speak to a human it repeats
-        // itself" / "Adding in great when not needed"): the realtime API can emit either
-        // "response.text.delta"/"response.text.done" (legacy naming) or
-        // "response.output_text.delta"/"response.output_text.done" (current naming) for the
-        // same response. We only process whichever event name shows up FIRST for a given
-        // response, and ignore the other — otherwise the same sentence gets sent to ElevenLabs
-        // (and the transcript) twice, which sounds like the assistant repeating itself.
-        activeTextEventType: null,
+        // itself"): the realtime API can emit either "response.text.delta"/"response.text.done"
+        // (legacy naming) or "response.output_text.delta"/"response.output_text.done" (current
+        // naming). Whichever naming a session actually uses is fixed for the whole call, so
+        // this is locked in ONCE per session the first time either event is seen, and never
+        // reset mid-call. (An earlier version of this fix reset the lock on every single
+        // response, which could cause it to start ignoring genuine deltas partway through a
+        // response and cut the agent off after only a few words — fixed by making this a
+        // session-level lock instead of a per-response one.)
+        textDeltaEventType: null,
+        // Barge-in fix ("agent stops speaking after a few words") — timestamp of when the
+        // current response started, used to ignore speech_started events that are almost
+        // certainly the mic picking up the agent's own voice rather than a real interruption.
+        currentResponseStartedAt: null,
         onEvent,
         startMs,
         openAiConnectedMs: Date.now(),
@@ -3602,11 +3618,12 @@ async function handleTextDelta(sessionId, event) {
   const session = sessions.get(sessionId);
   if (!session) return;
 
-  // De-dupe: only follow one of the two possible delta event names per response (see comment
-  // on session.activeTextEventType above).
-  if (!session.activeTextEventType) {
-    session.activeTextEventType = event.type;
-  } else if (session.activeTextEventType !== event.type) {
+  // De-dupe: lock onto whichever delta event name this session actually uses, once, for the
+  // whole call — see comment on session.textDeltaEventType above. This must NOT reset between
+  // responses, or it can start dropping real deltas partway through a sentence.
+  if (!session.textDeltaEventType) {
+    session.textDeltaEventType = event.type;
+  } else if (session.textDeltaEventType !== event.type) {
     return;
   }
 
@@ -3622,7 +3639,7 @@ async function handleTextDone(sessionId, event) {
   const session = sessions.get(sessionId);
   if (!session) return;
 
-  if (session.activeTextEventType && session.activeTextEventType !== event.type) {
+  if (session.textDeltaEventType && session.textDeltaEventType !== event.type) {
     return;
   }
 
@@ -3641,7 +3658,7 @@ async function handleRealtimeEvent(sessionId, event) {
 
     case "response.created":
       session.isResponseActive = true;
-      session.activeTextEventType = null;
+      session.currentResponseStartedAt = Date.now();
       if (!session.firstResponseCreatedMs) {
         session.firstResponseCreatedMs = Date.now();
       }
@@ -3660,7 +3677,7 @@ async function handleRealtimeEvent(sessionId, event) {
 
     case "response.done": {
       session.isResponseActive = false;
-      session.activeTextEventType = null;
+      session.currentResponseStartedAt = null;
 
       const calls = extractFunctionCallsFromResponse(event.response);
       for (const fc of calls) {
@@ -3680,7 +3697,21 @@ async function handleRealtimeEvent(sessionId, event) {
       await handleFunctionCall(sessionId, event);
       break;
 
-    case "input_audio_buffer.speech_started":
+    case "input_audio_buffer.speech_started": {
+      const elapsedSinceResponseStart = session.currentResponseStartedAt
+        ? Date.now() - session.currentResponseStartedAt
+        : Infinity;
+
+      if (session.isResponseActive && elapsedSinceResponseStart < BARGE_IN_GRACE_MS) {
+        // Almost certainly the mic picking up the agent's own voice just as it started
+        // speaking, not a real interruption — ignore it so the agent isn't cut off after only
+        // a few words. See BARGE_IN_GRACE_MS comment above.
+        console.log(
+          `[${sessionId}] Ignoring likely-echo speech_started (${elapsedSinceResponseStart}ms into response)`
+        );
+        break;
+      }
+
       console.log(`[${sessionId}] User interrupted — stopping AI voice`);
       if (session.isResponseActive) {
         sendWsJson(session.ws, { type: "response.cancel" });
@@ -3689,6 +3720,7 @@ async function handleRealtimeEvent(sessionId, event) {
       openElevenLabsStream(sessionId, true);
       session.onEvent({ type: "speech-started" });
       break;
+    }
 
     case "conversation.item.input_audio_transcription.completed":
       session.onEvent({ type: "user-transcript", transcript: event.transcript });
