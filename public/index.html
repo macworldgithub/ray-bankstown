@@ -622,6 +622,25 @@
     let timerInterval   = null;
     let callStartTime   = null;
 
+    // FIX — "half the sentence isn't spoken" / agent cuts off mid-response on every message:
+    // without hardware echo cancellation, the caller's microphone was picking up the agent's
+    // own voice coming out of the speakers. OpenAI's voice-activity detection has no way to
+    // know that's an echo — it just sees audio arriving on the mic input and treats it as the
+    // caller interrupting, which cancels the rest of the in-flight response. The fix is to stop
+    // sending mic audio to the server for the whole time the agent is speaking, so there's
+    // nothing for it to misread as a barge-in. Trade-off: the caller can't talk over the agent
+    // while it's mid-sentence (has to wait for it to finish) — that's intentional here, since a
+    // fully-spoken response is more important than interrupt support until proper acoustic echo
+    // cancellation (e.g. a headset, or server-side AEC) is in place.
+    let isAgentSpeaking   = false; // true any time audio is playing or still expected
+    let agentAudioSettled = true;  // true once the current response has no more audio coming
+
+    function updateMicGate() {
+        if (agentAudioSettled && !isPlaying && playbackQueue.length === 0) {
+            isAgentSpeaking = false;
+        }
+    }
+
     // ─── Audio Playback ─────────────────────────────────────
     let playbackQueue = [];
     let isPlaying     = false;
@@ -671,6 +690,7 @@
             isPlaying = false;
             setOrb('listening');
             setStatus('Listening...', 'active');
+            updateMicGate();
             return;
         }
         isPlaying = true;
@@ -733,6 +753,7 @@
         workletNode  = new AudioWorkletNode(audioContext, 'pcm-processor');
         workletNode.port.onmessage = (e) => {
             if (!isSessionActive) return;
+            if (isAgentSpeaking) return; // don't feed the mic back while the agent is talking — see FIX comment above
             const pcm16  = new Uint8Array(e.data);
             let binary = '';
             for (let i = 0; i < pcm16.length; i++) binary += String.fromCharCode(pcm16[i]);
@@ -783,11 +804,17 @@
     socket.on('session-started', () => {
         setStatus('Connected — Listening...', 'active');
         setOrb('listening');
+        isAgentSpeaking = false;
+        agentAudioSettled = true;
         startTimer();
         scenariosWrap.classList.add('hidden');
     });
 
-    socket.on('audio-delta', (data) => queueAudioChunk(data.delta));
+    socket.on('audio-delta', (data) => {
+        isAgentSpeaking = true;
+        agentAudioSettled = false;
+        queueAudioChunk(data.delta);
+    });
 
     let currentAgentText = '';
     socket.on('transcript-delta', (data) => {
@@ -797,7 +824,11 @@
         agentText.innerHTML = `<span class="active-text">${currentAgentText}</span>`;
     });
 
-    socket.on('transcript-done', () => { currentAgentText = ''; });
+    socket.on('transcript-done', () => {
+        currentAgentText = '';
+        agentAudioSettled = true; // no more audio coming for this response — release the mic once playback finishes
+        updateMicGate();
+    });
 
     socket.on('user-transcript', (data) => {
         userLabel.classList.remove('hidden');
@@ -807,6 +838,8 @@
 
     socket.on('speech-started', () => {
         stopPlayback();
+        isAgentSpeaking = false;
+        agentAudioSettled = true;
         setOrb('listening');
         setStatus('Listening...', 'active');
         currentAgentText = '';
@@ -900,6 +933,8 @@
 
     function endSession() {
         isSessionActive = false;
+        isAgentSpeaking = false;
+        agentAudioSettled = true;
         stopPlayback();
         stopMicrophone();
         stopTimer();
