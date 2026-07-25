@@ -2403,6 +2403,7 @@
 // ╚══════════════════════════════════════════════════════════════╝
 //   `);
 // });
+
 require("dotenv").config();
 
 const express = require("express");
@@ -2413,6 +2414,7 @@ const path = require("path");
 const fs = require("fs");
 const { v4: uuidv4 } = require("uuid");
 const mongoose = require("mongoose");
+const { startAudioSocketServer } = require("./telephony-bridge"); // ← 3CX/Asterisk bridge
 
 // ─── Config ───────────────────────────────────────────────
 const PORT = process.env.PORT || 3000;
@@ -2427,31 +2429,10 @@ const OPENAI_REALTIME_MODEL = process.env.OPENAI_REALTIME_MODEL || "gpt-realtime
 const OPENAI_INPUT_SAMPLE_RATE = Number(process.env.OPENAI_INPUT_SAMPLE_RATE || 24000);
 const OPENAI_VAD_THRESHOLD = Number(process.env.OPENAI_VAD_THRESHOLD || 0.8);
 const OPENAI_VAD_PREFIX_PADDING_MS = Number(process.env.OPENAI_VAD_PREFIX_PADDING_MS || 250);
-// NOTE (Action Log — "Voice Bot: Occasionally slow responses"): the previous 2000ms silence
-// window meant the assistant waited a long time after the caller stopped talking before it
-// started to reply, which read as "slow". Trimmed to a snappier default. If slowness persists
-// after this change it is most likely upstream (OpenAI Realtime test endpoint / network), not
-// something this app can fix — worth monitoring server-side round-trip logs if it recurs.
 const OPENAI_VAD_SILENCE_DURATION_MS = Number(process.env.OPENAI_VAD_SILENCE_DURATION_MS || 1100);
-
-// FIX — "Agent stops speaking after a few words": the mic (echoCancellation isn't 100%
-// reliable, especially over laptop speakers) frequently picks up the very start of the AI's
-// own voice and OpenAI's VAD reports that as the caller starting to talk. The old code treated
-// every "speech_started" event as a real barge-in and immediately cancelled the in-flight
-// response + tore down the TTS stream — cutting the agent off almost as soon as it began
-// speaking. We now ignore speech_started events that arrive within this grace window of a
-// response starting, since those are overwhelmingly likely to be the agent hearing itself
-// rather than a genuine interruption. Real barge-ins after the grace window still work as before.
 const BARGE_IN_GRACE_MS = Number(process.env.OPENAI_BARGE_IN_GRACE_MS || 700);
 
-// Agency website — used when texting callers a link (Action Log: "New enquiries — can we
-// text link to website?")
 const AGENCY_WEBSITE_URL = process.env.AGENCY_WEBSITE_URL || "https://raywhitebankstown.com.au";
-
-// Main office line — used as the fallback destination whenever the AI cannot identify a
-// specific person to transfer a caller to (new landlord business, new sales enquiries with
-// no known agent, tenants whose property manager can't be determined, etc).
-// Configure this with the real DID/queue number before going live.
 const OFFICE_MAIN_NUMBER = process.env.OFFICE_MAIN_NUMBER || null;
 
 // ─── MongoDB Connection ───────────────────────────────────
@@ -2464,10 +2445,7 @@ if (!MONGODB_URI) {
     .catch((err) => console.error("❌  MongoDB connection error:", err.message));
 }
 
-// ─── Twilio (SMS) — optional, used for "text me the website link" ────────
-// Action Log: "New enquiries — can we text link to website?"
-// If TWILIO_* env vars aren't set (or the `twilio` package isn't installed), SMS sending is
-// simulated (logged only) so the rest of the app keeps working in dev/test environments.
+// ─── Twilio (SMS) ──────────────────────────────────────────
 const TWILIO_ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID;
 const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN;
 const TWILIO_FROM_NUMBER = process.env.TWILIO_FROM_NUMBER;
@@ -3275,7 +3253,7 @@ function extractFunctionCallsFromResponse(response) {
 }
 
 // ─── Create OpenAI Realtime Session ───────────────────────
-function createRealtimeSession(sessionId, onEvent) {
+function createRealtimeSession(sessionId, onEvent, extraInstructions = "") {
   const url = `wss://api.openai.com/v1/realtime?model=${OPENAI_REALTIME_MODEL}`;
   const startMs = Date.now();
 
@@ -3309,7 +3287,7 @@ function createRealtimeSession(sessionId, onEvent) {
               },
             },
           },
-          instructions: getSystemPrompt(),
+          instructions: getSystemPrompt() + (extraInstructions ? `\n\n${extraInstructions}` : ""),
           tools: [getSaveCallLogTool(), getSendWebsiteLinkTool()],
           tool_choice: "auto",
         },
@@ -3323,19 +3301,7 @@ function createRealtimeSession(sessionId, onEvent) {
         elevenLabsReady: false,
         textBuffer: [],
         isResponseActive: false,
-        // De-dupe fix (Action Log — "Voice Bot: when asking to speak to a human it repeats
-        // itself"): the realtime API can emit either "response.text.delta"/"response.text.done"
-        // (legacy naming) or "response.output_text.delta"/"response.output_text.done" (current
-        // naming). Whichever naming a session actually uses is fixed for the whole call, so
-        // this is locked in ONCE per session the first time either event is seen, and never
-        // reset mid-call. (An earlier version of this fix reset the lock on every single
-        // response, which could cause it to start ignoring genuine deltas partway through a
-        // response and cut the agent off after only a few words — fixed by making this a
-        // session-level lock instead of a per-response one.)
         textDeltaEventType: null,
-        // Barge-in fix ("agent stops speaking after a few words") — timestamp of when the
-        // current response started, used to ignore speech_started events that are almost
-        // certainly the mic picking up the agent's own voice rather than a real interruption.
         currentResponseStartedAt: null,
         onEvent,
         startMs,
@@ -3618,9 +3584,6 @@ async function handleTextDelta(sessionId, event) {
   const session = sessions.get(sessionId);
   if (!session) return;
 
-  // De-dupe: lock onto whichever delta event name this session actually uses, once, for the
-  // whole call — see comment on session.textDeltaEventType above. This must NOT reset between
-  // responses, or it can start dropping real deltas partway through a sentence.
   if (!session.textDeltaEventType) {
     session.textDeltaEventType = event.type;
   } else if (session.textDeltaEventType !== event.type) {
@@ -3703,9 +3666,6 @@ async function handleRealtimeEvent(sessionId, event) {
         : Infinity;
 
       if (session.isResponseActive && elapsedSinceResponseStart < BARGE_IN_GRACE_MS) {
-        // Almost certainly the mic picking up the agent's own voice just as it started
-        // speaking, not a real interruption — ignore it so the agent isn't cut off after only
-        // a few words. See BARGE_IN_GRACE_MS comment above.
         console.log(
           `[${sessionId}] Ignoring likely-echo speech_started (${elapsedSinceResponseStart}ms into response)`
         );
@@ -3838,7 +3798,7 @@ function buildEventForwarder(socket) {
 }
 
 // ============================================================
-// SOCKET.IO — Client Connection Handling
+// SOCKET.IO — Client Connection Handling (browser/softphone testing)
 // ============================================================
 io.on("connection", (socket) => {
   console.log(`Client connected: ${socket.id}`);
@@ -3903,6 +3863,101 @@ io.on("connection", (socket) => {
   });
 });
 
+// ============================================================
+// TELEPHONY — 3CX (via Asterisk AudioSocket) Call Handling
+// ============================================================
+// Dialplan (extensions_raywhite.conf) hits this BEFORE calling
+// AudioSocket(), so by the time onCallStart fires below, the context
+// for this call (which DID/line it came in on) is already available.
+const callContexts = new Map(); // callId (uuid) -> { did, label, extension, callerid }
+
+app.get("/api/telephony/register-call", (req, res) => {
+  const { uuid, did, label, extension, callerid } = req.query;
+  if (!uuid) {
+    return res.status(400).json({ success: false, error: "uuid is required" });
+  }
+  callContexts.set(uuid, {
+    did: did || null,
+    label: label || null,
+    extension: extension || null,
+    callerid: callerid || null,
+    registeredAt: Date.now(),
+  });
+  console.log(
+    `[Telephony] Registered call ${uuid} — line "${label || "unknown"}" (DID ${did || "n/a"}, ext ${extension || "n/a"}), caller ${callerid || "unknown"}`
+  );
+  res.json({ success: true });
+});
+
+const telephonyCalls = new Map(); // callId -> { ctx, sessionId }
+
+startAudioSocketServer({
+  onCallStart: (callId, ctx) => {
+    const sessionId = `tel-${callId}`;
+    const callContext = callContexts.get(callId) || {};
+    telephonyCalls.set(callId, { ctx, sessionId, callContext });
+
+    // Give the AI a heads-up about which line this call landed on. It's
+    // appended to the standard system prompt, not a replacement for it —
+    // the call flow, tools, and hard rules above still apply as-is.
+    const extraInstructions = callContext.label
+      ? `=============================================================
+CALL CONTEXT — TELEPHONY LINE INFO
+=============================================================
+This call arrived via 3CX/Asterisk on the "${callContext.label}" line` +
+        (callContext.extension ? ` (internal extension ${callContext.extension})` : "") +
+        (callContext.did ? `, DID ${callContext.did}` : "") +
+        `. Treat this the same as any inbound call to the front desk unless
+you're told otherwise for this specific line — this is currently just
+routing metadata for logging/testing, not a behavioural instruction.`
+      : "";
+
+    const forwarder = (event) => {
+      switch (event.type) {
+        case "audio-delta": {
+          // event.delta is base64 PCM16 @ 16kHz from ElevenLabs
+          const pcm16k = Buffer.from(event.delta, "base64");
+          ctx.pushOutboundPcm16k(pcm16k);
+          break;
+        }
+        case "speech-started":
+          // Caller barged in — drop whatever TTS audio is still queued
+          ctx.clearOutbound();
+          break;
+        case "session-closed":
+        case "error":
+          ctx.hangup();
+          break;
+        default:
+          // call-logged, sms-sent, transcript-*, user-transcript, recording-saved
+          // all still fire — useful if you want to pipe these to a dashboard too.
+          break;
+      }
+    };
+
+    createRealtimeSession(sessionId, forwarder, extraInstructions)
+      .then(() => triggerGreeting(sessionId))
+      .catch((err) => {
+        console.error(`[${sessionId}] Telephony session failed:`, err.message);
+        ctx.hangup();
+      });
+  },
+
+  onAudio: (callId, base64Pcm24k) => {
+    const entry = telephonyCalls.get(callId);
+    if (!entry) return;
+    sendAudio(entry.sessionId, base64Pcm24k);
+  },
+
+  onCallEnd: (callId) => {
+    const entry = telephonyCalls.get(callId);
+    if (!entry) return;
+    closeSession(entry.sessionId);
+    telephonyCalls.delete(callId);
+    callContexts.delete(callId);
+  },
+});
+
 // ─── REST API Endpoints ───────────────────────────────────
 app.get("/api/call-logs", async (req, res) => {
   try {
@@ -3955,6 +4010,7 @@ server.listen(PORT, () => {
 ║   MongoDB:         ${MONGODB_URI ? "✓ Set" : "✗ Missing"}                             ║
 ║   Twilio SMS:      ${twilioClient ? "✓ Set" : "✗ Simulated (log only)"}                ║
 ║   Office Number:   ${OFFICE_MAIN_NUMBER || "not configured"}                          ║
+║   Telephony:       AudioSocket bridge on 127.0.0.1:8090       ║
 ╚══════════════════════════════════════════════════════════════╝
   `);
 });
