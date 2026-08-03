@@ -7305,7 +7305,7 @@ function createRealtimeSession(sessionId, onEvent, extraInstructions = "") {
             },
           },
           instructions: getSystemPrompt() + (extraInstructions ? `\n\n${extraInstructions}` : ""),
-          tools: [getSaveCallLogTool(), getSendWebsiteLinkTool()],
+          tools: [getSaveCallLogTool(), getSendWebsiteLinkTool(), getTransferCallTool()],
           tool_choice: "auto",
         },
       };
@@ -7327,6 +7327,7 @@ function createRealtimeSession(sessionId, onEvent, extraInstructions = "") {
         greetingTriggeredMs: null,
         firstResponseCreatedMs: null,
         firstAudioDeltaLogged: false,
+        callId: sessionId.startsWith("tel-") ? sessionId.replace("tel-", "") : null,
         processedCallIds: new Set(),
         recorder: new ConversationRecorder(sessionId),
         callLogs: [],
@@ -7480,6 +7481,117 @@ function closeElevenLabsWs(sessionId) {
   }
 }
 
+// ─── Transfer Call Tool ───────────────────────────────────
+function getTransferCallTool() {
+  return {
+    type: "function",
+    name: "transfer_call",
+    description:
+      "Transfer the current call to a human agent or department. Use this when the caller wants to speak to reception, a specific person, or needs assistance beyond what the AI can provide.",
+    parameters: {
+      type: "object",
+      properties: {
+        destination: {
+          type: "string",
+          enum: ["reception", "john", "afterhours"],
+          description:
+            "Where to transfer the call. Use 'reception' for general enquiries, buying, selling, application status. Use 'john' when caller asks for John specifically. Use 'afterhours' outside business hours.",
+        },
+        reason: {
+          type: "string",
+          description: "Brief reason for the transfer e.g. 'caller wants to buy property'",
+        },
+      },
+      required: ["destination", "reason"],
+    },
+  };
+}
+
+async function handleTransferCall(sessionId, call) {
+  const session = sessions.get(sessionId);
+  if (!session) return;
+
+  let args;
+  try {
+    args = typeof call.arguments === "string" ? JSON.parse(call.arguments) : call.arguments;
+  } catch (e) {
+    console.error("[Transfer] Failed to parse arguments", e);
+    return;
+  }
+
+  const { destination, reason } = args;
+  const callId = session.callId;
+
+  console.log(
+    `[Transfer] Initiating transfer | session=${sessionId} | destination=${destination} | reason=${reason}`
+  );
+
+  try {
+    const ariBase = process.env.ASTERISK_ARI_URL || "http://127.0.0.1:8088";
+    const ariAuth =
+      "Basic " +
+      Buffer.from(`${process.env.ASTERISK_ARI_USER}:${process.env.ASTERISK_ARI_PASS}`).toString(
+        "base64"
+      );
+
+    // Step 1 — Find the active Asterisk channel by matching AUDIOSOCKET_UUID
+    const channelsRes = await fetch(`${ariBase}/ari/channels`, {
+      headers: { Authorization: ariAuth },
+    });
+    const channels = await channelsRes.json();
+
+    let targetChannel = null;
+    for (const ch of channels) {
+      try {
+        const varRes = await fetch(
+          `${ariBase}/ari/channels/${ch.id}/variable?variable=AUDIOSOCKET_UUID`,
+          { headers: { Authorization: ariAuth } }
+        );
+        const varData = await varRes.json();
+        if (varData.value === callId) {
+          targetChannel = ch;
+          break;
+        }
+      } catch (_) {
+        // channel may have gone away, skip
+      }
+    }
+
+    if (!targetChannel) {
+      console.error(`[Transfer] Could not find Asterisk channel for callId=${callId}`);
+      return;
+    }
+
+    console.log(`[Transfer] Found channel: ${targetChannel.id}`);
+
+    // Step 2 — Continue channel in transfer dialplan context
+    const continueRes = await fetch(
+      `${ariBase}/ari/channels/${targetChannel.id}/continue`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: ariAuth,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          context: "raywhite-transfer",
+          extension: destination,
+          priority: 1,
+        }),
+      }
+    );
+
+    if (continueRes.ok) {
+      console.log(`[Transfer] Successfully continued to ${destination}`);
+    } else {
+      const err = await continueRes.text();
+      console.error(`[Transfer] Continue failed: ${err}`);
+    }
+  } catch (err) {
+    console.error("[Transfer] ARI call failed:", err);
+  }
+}
+
 // ─── Handle function calls from OpenAI ────────────────────
 async function handleFunctionCall(sessionId, eventOrItem) {
   const session = sessions.get(sessionId);
@@ -7492,6 +7604,8 @@ async function handleFunctionCall(sessionId, eventOrItem) {
     await handleSaveCallLog(sessionId, call);
   } else if (call.name === "send_website_link") {
     await handleSendWebsiteLink(sessionId, call);
+  } else if (call.name === "transfer_call") {
+    await handleTransferCall(sessionId, call);
   }
 }
 
