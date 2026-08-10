@@ -6648,15 +6648,56 @@ Golden rule: only ever offer a transfer to a NAMED person if you can reasonably 
 person is (the caller tells you, or the property/context makes it clear). If you can't identify a
 specific person, don't guess — transfer to the main office instead.
 
+Before transferring ANY call, always verbally acknowledge first — never transfer silently. Say something warm and natural like:
+
 When transferring to a specific person, always say it this way:
-"I'll transfer your call to [name], please make sure to leave a message if [name] isn't available."
+"Sure! Let me transfer you to [name] right now, one moment please!"
 
 When transferring to the main office (no specific person identified), say it this way:
-"I'll transfer you to our main office now — one moment."
+"Let me put you through to our reception team right now, one moment!"
+
+When transferring to after hours (out of hours / property management), say it this way:
+"Let me put you through to our after hours team right now, one moment please!"
+
+CRITICAL INSTRUCTION: You MUST output this verbal acknowledgment AND call the transfer_call tool in the EXACT SAME RESPONSE. Do NOT pause or wait for the caller to reply. Speak the phrase, then immediately trigger the transfer. Always use the person's name if transferring to a specific person.
 
 Do NOT send an email or text message to a property manager or sales agent as a substitute for or
 alongside a transfer — at this stage transfers are voice-only. (SMS is only ever used for the
 "text me the website link" use case below, never to notify staff.)
+
+=============================================================
+TRANSFER TOOL — HOW TO USE transfer_call
+=============================================================
+When you decide to transfer a call, you MUST call the transfer_call 
+tool with the correct destination value. Here is the exact mapping:
+
+destination: "reception"
+→ Use for: main office, general enquiries, buying, selling, 
+  new landlords, application status, anyone you can't identify,
+  Delita, Tony, Charlie, Joshua Nassif, Jordon Le Breux,
+  or any Sales Agent / Director
+
+destination: "john"  
+→ Use ONLY when: caller explicitly asks for John or John Agent
+  (This is a demo staff member for testing purposes)
+
+destination: "afterhours"
+→ Use for: calls outside business hours, after hours enquiries,
+  Farah Antone, Michelle Clay, Mary, Matthew Natoli,
+  or any Property Manager
+
+IMPORTANT RULES:
+- CRITICAL: You MUST generate the verbal acknowledgment AND call the transfer_call tool IN THE EXACT SAME TURN.
+- DO NOT say the phrase and then stop to wait for the user's reply.
+- NEVER say you will transfer and then keep talking — trigger the 
+  tool RIGHT AFTER the transfer sentence
+- If caller asks for "John", use destination: "john" immediately
+- If caller asks for any Property Manager by name, use destination: 
+  "afterhours" (they share the same queue for this demo)
+- If caller asks for reception, main office, or any Sales Agent, 
+  use destination: "reception"
+- After calling transfer_call, say nothing further — the call will 
+  be handed off
 
 =============================================================
 CALL FLOW — HAPPY PATH (Steps 01 → 02 → 03)
@@ -6707,24 +6748,19 @@ Classify the call into one of these categories internally:
 ─────────────────────────────────────────────
 STEP 02 — VALUE PROPOSITION
 ─────────────────────────────────────────────
-Trigger ONLY for high-intent callers: sellers, serious buyers/renters, or appraisal requests.
+Trigger ONLY for high-intent callers: serious renters looking to book an inspection.
 Skip for transactional callers (just need a time, address, or transfer).
 
 [DELIVER THIS NATURAL SCRIPT — adapt as needed]
 
 "Here at Ray White Bankstown we bring the whole team to every property. Directors Tony Roumanous and Charlie Sioud, plus our full sales and property management crew.
 Most of our clients are getting strong results right now because of our local knowledge across Bankstown, Georges Hall, Chester Hill, and Wiley Park — plus access to thousands of active buyers and tenants on our database.
-Whether you want a free appraisal, to book an inspection, or list your home, I can get you sorted right now — no waiting on hold or chasing emails."
+Whether you want to book an inspection, or check rental listings, I can get you sorted right now — no waiting on hold or chasing emails."
 
 ─────────────────────────────────────────────
 STEP 03 — AGENTIC / PROACTIVE CLOSE
 ─────────────────────────────────────────────
 Don't end the conversation passively. Always offer specific next steps.
-
-For APPRAISAL / SELLING intent (an existing seller wanting a free appraisal — not a general new
-landlord enquiry, see USE CASE: NEW LANDLORD ENQUIRY for that):
-"I've checked our calendar and we've got a couple of great options this week — we can do a free appraisal at your place on Tuesday at 11am or Thursday at 2pm. Which one works better for you?
-Or if you'd prefer, I can send you a quick market update for your street first so you can see recent sales — would you like that?"
 
 For INSPECTION BOOKING intent:
 "I can lock in a private inspection for you — we've got availability tomorrow at 5:30pm, or Saturday morning at 10am. Would either of those work?"
@@ -6752,6 +6788,12 @@ SPECIFIC USE CASES
 =============================================================
 
 ─────────────────────────────────────────────
+USE CASE: OPENING HOURS
+─────────────────────────────────────────────
+If anyone asks about opening hours, always answer directly without transferring or escalating:
+"We're open Monday to Friday 9am to 5:30pm, and Saturday 9am to 4pm. We're closed on Sundays!"
+
+─────────────────────────────────────────────
 USE CASE: HOME OPEN / INSPECTION TIMES
 ─────────────────────────────────────────────
 Caller asks for open home times or property details.
@@ -6773,8 +6815,11 @@ Collect name + phone/email, confirm, then call save_call_log.
 ─────────────────────────────────────────────
 USE CASE: SELLING / FREE APPRAISAL
 ─────────────────────────────────────────────
-This is the highest-value use case. Always deliver Step 02 (value prop) before Step 03 (close).
-Collect: name, property address, preferred appraisal time, best contact.
+Do NOT deliver a pitch or try to book an appraisal yourself.
+Treat this exactly like a general sales enquiry.
+Ask for their name, then transfer straight to reception.
+"No worries — I'll transfer you to our main office now so they can assist you with that, one moment."
+Log as intent_category: "staff_transfer", outcome: "transferred".
 
 ─────────────────────────────────────────────
 USE CASE: BUYER / SALES ENQUIRY
@@ -6841,22 +6886,21 @@ issues), staff_requested set to the PM's name if identified.
 ─────────────────────────────────────────────
 USE CASE: RENTAL APPLICATION FOLLOW-UP
 ─────────────────────────────────────────────
-This is for someone checking the status of an application they've ALREADY submitted (not someone
-wanting to apply for the first time — see USE CASE: PROPERTY LEASING ENQUIRIES for new applicants,
-who should be pointed to the website).
-
-"Of course — let me get some details so I can pass this on to the right property manager. Which property did you apply for, and what's your full name?"
-Collect details, then log intent_category: "rental_application_followup", outcome:
-"callback_scheduled" (a PM will follow up) unless you're able to identify and transfer to their PM
-directly, in which case follow the same transfer wording as TENANT INQUIRIES above.
+This is for someone checking the status of an application they've ALREADY submitted.
+Do NOT take a message or schedule a callback.
+Ask for their name, then transfer straight to reception.
+"No worries — I'll transfer you to our main office now so they can check that for you, one moment."
+Log as intent_category: "staff_transfer", outcome: "transferred".
 
 ─────────────────────────────────────────────
 USE CASE: PROPERTY LEASING ENQUIRIES (available rental listings)
 ─────────────────────────────────────────────
 Callers frequently ask about specific rental listings. Answer using details from
 raywhitebankstown.com.au for the property in question. NEVER invent or guess a
-figure or feature you don't actually know — if you don't have the detail on hand,
-be upfront and offer to have the property manager confirm and call/text them back.
+figure or feature you don't actually know.
+Never send rental enquiries to voicemail. Always:
+- Send the caller the website link via SMS.
+- If further help is needed, transfer to reception.
 
 Typical questions this covers, all answered directly and efficiently (no need for
 the full sales flow — these are transactional):
@@ -6893,10 +6937,14 @@ If they say yes:
 1. Confirm their mobile number (use caller_phone if you already have it).
 2. Call the send_website_link tool with that number and a short note (e.g. the property address
    or topic discussed).
-3. Confirm briefly: "All done — that link's on its way to you now."
+3. Confirm briefly and ask if they need a transfer: "All done — that link's on its way to you now. Would you like me to transfer you to the reception for any further assistance?"
+   - If they say yes: "No worries, I'll transfer you now." (Follow the transfer routing logic to reception).
+   - If they say no: Ask, "Is there anything else you'd like to know?"
+     - If they ask something else: Answer their question and continue to assist them.
+     - If they say no: Close the call warmly, e.g., "Alright, thank you for calling Ray White Bankstown. Have a great day!" and then end the call.
 
 Log intent_category: whatever the underlying enquiry was (usually "property_inquiry" or
-"general_enquiry"), outcome: "sms_sent".
+"general_enquiry"), outcome: "sms_sent", or "transferred" if they choose to transfer.
 
 ─────────────────────────────────────────────
 USE CASE: RENTAL PROCESS / APPLICATION FAQs
@@ -7011,6 +7059,22 @@ Optional but important:
 
 Confirmation after logging (if booking was made):
 "Perfect, [name] — I've got that locked in for you. You'll hear from the team [at preferred_time / shortly]. Is there anything else I can help with today?"
+
+=============================================================
+PROPERTY MANAGER LOOKUP TOOL
+=============================================================
+Use the lookupPropertyManager tool when:
+- Caller mentions a property address and wants their PM
+- Caller asks to speak to a PM by name
+- Caller has a maintenance issue and doesn't know their PM
+
+HOW TO USE:
+- Pass whatever the caller said (address OR name) as the query
+- If found: You MUST first speak EXACTLY this phrase out loud: "Your property manager is [pmName]. They are currently unavailable, so I am transferring you to the appropriate line, one moment." THEN, in the EXACT SAME TURN, call transfer_call(destination: "afterhours").
+- If not found: You MUST first speak EXACTLY this phrase out loud: "I wasn't able to find that property. I am transferring you to our team now." THEN, in the EXACT SAME TURN, call transfer_call(destination: "afterhours").
+
+NEVER say the PM is available — always say unavailable 
+and transfer to afterhours. You cannot reach them directly.
 
 =============================================================
 HARD RULES — NON-NEGOTIABLE
@@ -7305,7 +7369,7 @@ function createRealtimeSession(sessionId, onEvent, extraInstructions = "") {
             },
           },
           instructions: getSystemPrompt() + (extraInstructions ? `\n\n${extraInstructions}` : ""),
-          tools: [getSaveCallLogTool(), getSendWebsiteLinkTool(), getTransferCallTool()],
+          tools: [getSaveCallLogTool(), getSendWebsiteLinkTool(), getTransferCallTool(), getLookupPropertyManagerTool()],
           tool_choice: "auto",
         },
       };
@@ -7433,7 +7497,7 @@ function openElevenLabsStream(sessionId, force = false) {
         session.recorder.addAgentAudio(msg.audio);
         session.onEvent({ type: "audio-delta", delta: msg.audio });
       }
-    } catch {}
+    } catch { }
   });
 
   elWs.on("error", (err) => {
@@ -7474,10 +7538,195 @@ function closeElevenLabsWs(sessionId) {
       } else if (session.elevenLabsWs.readyState === WebSocket.OPEN) {
         session.elevenLabsWs.close();
       }
-    } catch {}
+    } catch { }
     session.elevenLabsWs = null;
     session.elevenLabsReady = false;
     session.textBuffer = [];
+  }
+}
+
+// ─── Property Manager Lookup Tool ─────────────────────────
+let pmCache = {
+  data: null,
+  timestamp: null,
+  expiryMs: 5 * 60 * 1000
+};
+
+const pmFallbackData = [
+  { "pmName": "Samir Ramjali", "address": "25A Ambon Road, Holsworthy" },
+  { "pmName": "Maria Ciampa", "address": "4/30-34 Sir Joseph Banks Street, Bankstown" },
+  { "pmName": "Jaytee Nguyen", "address": "1/265 Miller Road, Bass Hill" },
+  { "pmName": "Ruba Arifaki & Bilal Arifaki", "address": "18 Rabaul Road, Georges Hall" },
+  { "pmName": "Nahla Lababidi", "address": "6/199 Auburn Road, Yagoona" },
+  { "pmName": "Akel Assaad", "address": "1E Fenwick Street, Yagoona" },
+  { "pmName": "Alah Arian & Trent Douglas Elford-Ciantar", "address": "2/3 Ellis Street, Condell Park" },
+  { "pmName": "Yasser Ibrahim El-Hussein", "address": "58 Marden Street, Georges Hall" },
+  { "pmName": "Nur Syafiqah Binti Badhrul Nizam", "address": "13/30-34 Sir Joseph Banks Street, Bankstown" },
+  { "pmName": "Houssien Goumrawi", "address": "72 Military Road, Merrylands" },
+  { "pmName": "Mark El-Ali", "address": "32 Verbena Avenue, Bankstown" },
+  { "pmName": "Osama Mahmoud Mohamed Allam", "address": "36/30-34 Sir Joseph Banks Street, Bankstown" },
+  { "pmName": "Ngoc Anh Nguyen & Lisa Latsombath", "address": "76A Edgar Street, Bankstown" },
+  { "pmName": "Emad Al Daya & Amal Al Daya", "address": "148 Marion Street, Bankstown" },
+  { "pmName": "Md Mamun-Ur-Rashid Khan", "address": "11A Conway Road, Bankstown" },
+  { "pmName": "Ahmad Daoud & Emma Allan", "address": "1/1 Eldon Avenue, Georges Hall" },
+  { "pmName": "Julie Najem", "address": "60 Jacaranda Drive, Georges Hall" },
+  { "pmName": "John Blackley", "address": "1/243 Canterbury Road, Bankstown" },
+  { "pmName": "Tony Naasa & Meera Derbas", "address": "58 Jocelyn Street, Chester Hill" },
+  { "pmName": "Alaa Houblos", "address": "37/30-34 Sir Joseph Banks Street, Bankstown" },
+  { "pmName": "Daniel Rapana", "address": "88/169 Horsley Road, Panania" },
+  { "pmName": "Patricia Kamara and Tigidankay Kamara", "address": "44 Cann Street, Bass Hill" },
+  { "pmName": "Dian Wahyu Putra & Dadang Wiraguna", "address": "20 Beale Street, Georges Hall" },
+  { "pmName": "Rodney and Gordana Van Schellbeck", "address": "3A English Street, Revesby" },
+  { "pmName": "Maysa Arja", "address": "115 Macquarie Street, Greenacre" },
+  { "pmName": "Alkhair Ammar & Alia Osman", "address": "4/11-13 Resthaven Road, Bankstown" },
+  { "pmName": "Silvana El kassar & Ayman Jamella Maryam", "address": "19A Verbena Avenue, Bankstown" },
+  { "pmName": "Ms Fadileh Chahal & Mr Khaled Melhem", "address": "A301/4 French Avenue, Bankstown" },
+  { "pmName": "Omar Yehia & Hoda Marhaba", "address": "3 Hargreaves Street, Condell Park" },
+  { "pmName": "Abir Dergham & Suliman Zakka", "address": "2 Lambert Street, Yagoona" },
+  { "pmName": "Shakib Ashik", "address": "7/2-4 Myrtle Road, Bankstown" },
+  { "pmName": "Zoe Hassoun, Mariah Tahan & Khaled Tahan", "address": "35A Myall Street, Punchbowl" },
+  { "pmName": "Abdul Rafay and Muhammad Qamar", "address": "22 Polo Street, Revesby" },
+  { "pmName": "Elenor Latu & Tamara Latu & Anaseini Latu", "address": "14 Greater Circuit, Bass Hill" },
+  { "pmName": "Laurette Batthani", "address": "16 Henry Street, Punchbowl" },
+  { "pmName": "Raheel Khan", "address": "B502/75 Rickard Road, Bankstown" },
+  { "pmName": "Mr Ahmad Al Ahmad", "address": "31 Brancourt Avenue, Bankstown" },
+  { "pmName": "Jannatul Tamil", "address": "6/110 Lakemba Street, Lakemba" },
+  { "pmName": "Mohamed Alameddine", "address": "B302/17 Hanna Street, Potts Hill" },
+  { "pmName": "Bula Management Pty Ltd", "address": "374 Chapel Road, Bankstown" }
+];
+
+async function lookupPropertyManager(query) {
+  const q = (query || "").toLowerCase();
+  
+  let source = "api";
+  let searchData = [];
+
+  const now = Date.now();
+  const isCacheValid = pmCache.data && pmCache.timestamp && (now - pmCache.timestamp < pmCache.expiryMs);
+
+  if (isCacheValid) {
+    searchData = pmCache.data;
+    source = "cache";
+  } else {
+    try {
+      const response = await fetch("https://api.propertytree.io/dashboards/arrears", {
+        method: "GET",
+        headers: {
+          "Accept": "application/json",
+          "Authorization": `Bearer ${process.env.PROPERTY_TREE_TOKEN}`,
+          "x-company-id": process.env.PROPERTY_TREE_COMPANY_ID,
+          "Content-Type": "application/json",
+          "Origin": "https://dashboards-cdn.propertytree.com"
+        }
+      });
+      if (!response.ok) {
+        throw new Error(`API returned ${response.status}`);
+      }
+      const data = await response.json();
+      
+      const arraysToSearch = [
+        data.residentialRent?.tenancies,
+        data.residentialInvoices?.tenancies,
+        data.commercialRent?.tenancies,
+        data.commercialOutgoings?.tenancies,
+        data.commercialInvoices?.tenancies
+      ];
+
+      const allTenancies = arraysToSearch.flat().filter(Boolean);
+      
+      const uniqueAddresses = new Set();
+      searchData = [];
+      for (const t of allTenancies) {
+        if (t.property?.address && t.tenancy?.name) {
+          if (!uniqueAddresses.has(t.property.address)) {
+            uniqueAddresses.add(t.property.address);
+            searchData.push({ pmName: t.tenancy.name, address: t.property.address });
+          }
+        }
+      }
+      
+      if (searchData.length > 0) {
+        pmCache.data = searchData;
+        pmCache.timestamp = now;
+      } else {
+        throw new Error("No data found in API");
+      }
+    } catch (err) {
+      console.warn("[Property Manager Lookup] API failed, using cache or fallback:", err.message);
+      if (pmCache.data) {
+        searchData = pmCache.data;
+        source = "cache";
+      } else {
+        searchData = pmFallbackData;
+        source = "fallback";
+      }
+    }
+  }
+
+  const found = searchData.find(d => 
+    d.address.toLowerCase().includes(q) || 
+    d.pmName.toLowerCase().includes(q)
+  );
+
+  if (found) {
+    return {
+      found: true,
+      pmName: found.pmName,
+      propertyAddress: found.address,
+      source
+    };
+  } else {
+    return {
+      found: false,
+      source
+    };
+  }
+}
+
+function getLookupPropertyManagerTool() {
+  return {
+    type: "function",
+    name: "lookupPropertyManager",
+    description: "Look up a property manager's name and property address by providing either a partial property address or property manager name.",
+    parameters: {
+      type: "object",
+      properties: {
+        query: {
+          type: "string",
+          description: "The partial address or property manager name mentioned by the caller."
+        }
+      },
+      required: ["query"]
+    }
+  };
+}
+
+async function handleLookupPropertyManager(sessionId, call) {
+  const session = sessions.get(sessionId);
+  if (!session) return;
+  const callId = typeof call.call_id === "string" ? call.call_id : null;
+  if (callId && session.processedCallIds.has(callId)) return;
+  if (callId) session.processedCallIds.add(callId);
+
+  try {
+    const args = typeof call.arguments === "string" ? JSON.parse(call.arguments) : call.arguments;
+    console.log(`[${sessionId}] Looking up property manager | query: ${args.query}`);
+    
+    const result = await lookupPropertyManager(args.query);
+    console.log(`[${sessionId}] Lookup result:`, result);
+
+    sendWsJson(session.ws, {
+      type: "conversation.item.create",
+      item: {
+        type: "function_call_output",
+        call_id: callId,
+        output: JSON.stringify(result)
+      }
+    });
+    sendWsJson(session.ws, { type: "response.create" });
+  } catch (err) {
+    if (callId) session.processedCallIds.delete(callId);
+    console.error(`[${sessionId}] Error looking up property manager:`, err);
   }
 }
 
@@ -7526,6 +7775,9 @@ async function handleTransferCall(sessionId, call) {
     `[Transfer] Initiating transfer | session=${sessionId} | destination=${destination} | reason=${reason}`
   );
 
+  // Delay the transfer by 7 seconds to allow the AI's verbal acknowledgment to play over the audio socket before Asterisk redirects the call
+  await new Promise((resolve) => setTimeout(resolve, 7000));
+
   try {
     const ariBase = process.env.ASTERISK_ARI_URL || "http://127.0.0.1:8088";
     const ariAuth =
@@ -7539,21 +7791,20 @@ async function handleTransferCall(sessionId, call) {
       headers: { Authorization: ariAuth },
     });
     const channels = await channelsRes.json();
+    console.log("[Transfer] ARI channels response:", JSON.stringify(channels));
+
+    if (!Array.isArray(channels)) {
+      console.error("[Transfer] ARI did not return an array:", channels);
+      return;
+    }
 
     let targetChannel = null;
     for (const ch of channels) {
-      try {
-        const varRes = await fetch(
-          `${ariBase}/ari/channels/${ch.id}/variable?variable=AUDIOSOCKET_UUID`,
-          { headers: { Authorization: ariAuth } }
-        );
-        const varData = await varRes.json();
-        if (varData.value === callId) {
-          targetChannel = ch;
-          break;
-        }
-      } catch (_) {
-        // channel may have gone away, skip
+      // The UUID is embedded in app_data as "<UUID>,127.0.0.1:8090"
+      const appData = ch?.dialplan?.app_data || "";
+      if (appData.startsWith(callId)) {
+        targetChannel = ch;
+        break;
       }
     }
 
@@ -7564,28 +7815,74 @@ async function handleTransferCall(sessionId, call) {
 
     console.log(`[Transfer] Found channel: ${targetChannel.id}`);
 
-    // Step 2 — Continue channel in transfer dialplan context
-    const continueRes = await fetch(
-      `${ariBase}/ari/channels/${targetChannel.id}/continue`,
-      {
-        method: "POST",
-        headers: {
-          Authorization: ariAuth,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          context: "raywhite-transfer",
-          extension: destination,
-          priority: 1,
-        }),
-      }
-    );
+    // Use AMI redirect — works on dialplan channels (AudioSocket is not Stasis)
+    const net = require("net");
 
-    if (continueRes.ok) {
-      console.log(`[Transfer] Successfully continued to ${destination}`);
-    } else {
-      const err = await continueRes.text();
-      console.error(`[Transfer] Continue failed: ${err}`);
+    const amiHost = "127.0.0.1";
+    const amiPort = 5038;
+    const amiUser = process.env.ASTERISK_AMI_USER || "tradie";
+    const amiPass = process.env.ASTERISK_AMI_PASS || "change-me-now";
+
+    await new Promise((resolve, reject) => {
+      const client = net.createConnection(amiPort, amiHost);
+      let buffer = "";
+      let loggedIn = false;
+      let redirectSent = false;
+
+      client.on("data", (data) => {
+        buffer += data.toString();
+
+        if (!loggedIn && buffer.includes("Authentication accepted")) {
+          loggedIn = true;
+          buffer = "";
+          const redirect = [
+            "Action: Redirect",
+            `Channel: ${targetChannel.name}`,
+            `Context: raywhite-transfer`,
+            `Exten: ${destination}`,
+            `Priority: 1`,
+            `ActionID: transfer-${Date.now()}`,
+            "",
+            ""
+          ].join("\r\n");
+          client.write(redirect);
+          redirectSent = true;
+        }
+
+        if (redirectSent && buffer.includes("Response:")) {
+          console.log(`[Transfer] AMI redirect response: ${buffer.trim()}`);
+          client.end();
+          resolve();
+        }
+      });
+
+      client.on("connect", () => {
+        const login = [
+          "Action: Login",
+          `Username: ${amiUser}`,
+          `Secret: ${amiPass}`,
+          "",
+          ""
+        ].join("\r\n");
+        client.write(login);
+      });
+
+      client.on("error", (err) => {
+        console.error("[Transfer] AMI connection error:", err);
+        reject(err);
+      });
+
+      setTimeout(() => {
+        client.destroy();
+        resolve();
+      }, 5000);
+    });
+
+    // Hang up AudioSocket so Asterisk proceeds to Dial after redirect
+    const callEntry = telephonyCalls.get(callId);
+    if (callEntry && callEntry.ctx) {
+      console.log(`[Transfer] Hanging up AudioSocket for callId=${callId}`);
+      callEntry.ctx.hangup();
     }
   } catch (err) {
     console.error("[Transfer] ARI call failed:", err);
@@ -7604,7 +7901,15 @@ async function handleFunctionCall(sessionId, eventOrItem) {
     await handleSaveCallLog(sessionId, call);
   } else if (call.name === "send_website_link") {
     await handleSendWebsiteLink(sessionId, call);
+  } else if (call.name === "lookupPropertyManager") {
+    await handleLookupPropertyManager(sessionId, call);
   } else if (call.name === "transfer_call") {
+    const transferKey = `transfer_call`;
+    if (session.processedCallIds.has(transferKey)) {
+      console.log("[Transfer] Duplicate transfer ignored");
+      return;
+    }
+    session.processedCallIds.add(transferKey);
     await handleTransferCall(sessionId, call);
   }
 }
@@ -7848,7 +8153,7 @@ function closeSession(sessionId) {
     closeElevenLabsWs(sessionId);
     try {
       session.ws.close();
-    } catch {}
+    } catch { }
     sessions.delete(sessionId);
     console.log(`[${sessionId}] Session closed`);
   }
@@ -7939,7 +8244,7 @@ io.on("connection", (socket) => {
 
   const forwarder = buildEventForwarder(socket);
 
-  startPrewarm(socket.id, forwarder).catch(() => {});
+  startPrewarm(socket.id, forwarder).catch(() => { });
 
   socket.on("start-session", async () => {
     const sessionId = socket.id;
@@ -7962,7 +8267,7 @@ io.on("connection", (socket) => {
             triggerGreeting(sessionId);
             return;
           }
-        } catch {}
+        } catch { }
         clearPrewarmState(sessionId);
       }
 
@@ -8039,9 +8344,9 @@ startAudioSocketServer({
 CALL CONTEXT — TELEPHONY LINE INFO
 =============================================================
 This call arrived via 3CX/Asterisk on the "${callContext.label}" line` +
-        (callContext.extension ? ` (internal extension ${callContext.extension})` : "") +
-        (callContext.did ? `, DID ${callContext.did}` : "") +
-        `. Treat this the same as any inbound call to the front desk unless
+      (callContext.extension ? ` (internal extension ${callContext.extension})` : "") +
+      (callContext.did ? `, DID ${callContext.did}` : "") +
+      `. Treat this the same as any inbound call to the front desk unless
 you're told otherwise for this specific line — this is currently just
 routing metadata for logging/testing, not a behavioural instruction.`
       : "";
