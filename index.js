@@ -7597,7 +7597,11 @@ const pmFallbackData = [
 
 async function lookupPropertyManager(query) {
   const q = (query || "").toLowerCase();
+<<<<<<< Updated upstream
   
+=======
+
+>>>>>>> Stashed changes
   let source = "api";
   let searchData = [];
 
@@ -7623,7 +7627,11 @@ async function lookupPropertyManager(query) {
         throw new Error(`API returned ${response.status}`);
       }
       const data = await response.json();
+<<<<<<< Updated upstream
       
+=======
+
+>>>>>>> Stashed changes
       const arraysToSearch = [
         data.residentialRent?.tenancies,
         data.residentialInvoices?.tenancies,
@@ -7633,7 +7641,11 @@ async function lookupPropertyManager(query) {
       ];
 
       const allTenancies = arraysToSearch.flat().filter(Boolean);
+<<<<<<< Updated upstream
       
+=======
+
+>>>>>>> Stashed changes
       const uniqueAddresses = new Set();
       searchData = [];
       for (const t of allTenancies) {
@@ -7644,7 +7656,11 @@ async function lookupPropertyManager(query) {
           }
         }
       }
+<<<<<<< Updated upstream
       
+=======
+
+>>>>>>> Stashed changes
       if (searchData.length > 0) {
         pmCache.data = searchData;
         pmCache.timestamp = now;
@@ -7663,8 +7679,13 @@ async function lookupPropertyManager(query) {
     }
   }
 
+<<<<<<< Updated upstream
   const found = searchData.find(d => 
     d.address.toLowerCase().includes(q) || 
+=======
+  const found = searchData.find(d =>
+    d.address.toLowerCase().includes(q) ||
+>>>>>>> Stashed changes
     d.pmName.toLowerCase().includes(q)
   );
 
@@ -7711,7 +7732,11 @@ async function handleLookupPropertyManager(sessionId, call) {
   try {
     const args = typeof call.arguments === "string" ? JSON.parse(call.arguments) : call.arguments;
     console.log(`[${sessionId}] Looking up property manager | query: ${args.query}`);
+<<<<<<< Updated upstream
     
+=======
+
+>>>>>>> Stashed changes
     const result = await lookupPropertyManager(args.query);
     console.log(`[${sessionId}] Lookup result:`, result);
 
