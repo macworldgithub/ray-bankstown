@@ -6462,42 +6462,77 @@ if (!MONGODB_URI) {
     .catch((err) => console.error("❌  MongoDB connection error:", err.message));
 }
 
-// ─── Twilio (SMS) ──────────────────────────────────────────
-const TWILIO_ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID;
-const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN;
-const TWILIO_FROM_NUMBER = process.env.TWILIO_FROM_NUMBER;
-let twilioClient = null;
+// ─── MobileMessage (SMS) ──────────────────────────────────────────
+const MOBILEMESSAGE_USERNAME = process.env.MOBILEMESSAGE_USERNAME;
+const MOBILEMESSAGE_PASSWORD = process.env.MOBILEMESSAGE_PASSWORD;
+const MOBILEMESSAGE_FROM = process.env.MOBILEMESSAGE_FROM;
 
-if (TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN && TWILIO_FROM_NUMBER) {
-  try {
-    // eslint-disable-next-line global-require
-    const twilio = require("twilio");
-    twilioClient = twilio(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN);
-    console.log("✅  Twilio SMS configured");
-  } catch (err) {
-    console.warn("⚠️  `twilio` package not installed — run `npm install twilio`. SMS will be simulated (logged only).");
-  }
+if (MOBILEMESSAGE_USERNAME && MOBILEMESSAGE_PASSWORD && MOBILEMESSAGE_FROM) {
+  console.log("✅  MobileMessage SMS configured");
 } else {
-  console.warn("⚠️  TWILIO_* env vars not set — SMS will be simulated (logged only).");
+  console.warn("⚠️  MOBILEMESSAGE_* env vars not set — SMS will be simulated (logged only).");
 }
 
-async function sendSmsLink(toNumber, messageBody) {
-  if (!toNumber) return { success: false, reason: "missing_phone_number" };
+async function sendSms(toNumber, messageBody) {
+  if (!toNumber) {
+    console.warn("[SMS] ❌ Aborted — no phone number provided.");
+    return { success: false, reason: "missing_phone_number" };
+  }
 
-  if (!twilioClient) {
-    console.log(`[SMS-SIMULATED] To: ${toNumber} | "${messageBody}"`);
+  // MobileMessage API expects E.164 format WITH the leading +
+  // e.g. +61412345678
+  let cleanStr = String(toNumber).replace(/\s+/g, "").replace(/^\+/, "");
+  if (cleanStr.startsWith("0")) {
+    cleanStr = "61" + cleanStr.substring(1);
+  }
+  const normalizedNumber = "+" + cleanStr;
+
+  console.log(`[SMS] 📤 Attempting to send SMS`);
+  console.log(`[SMS]    ➤ To:      ${normalizedNumber} (raw: ${toNumber})`);
+  console.log(`[SMS]    ➤ From:    ${MOBILEMESSAGE_FROM}`);
+  console.log(`[SMS]    ➤ Message: ${messageBody}`);
+
+  if (!MOBILEMESSAGE_USERNAME || !MOBILEMESSAGE_PASSWORD || !MOBILEMESSAGE_FROM) {
+    console.log(`[SMS] ⚠️  SIMULATED (credentials not set) — message NOT actually sent to ${normalizedNumber}.`);
     return { success: true, simulated: true };
   }
 
   try {
-    const msg = await twilioClient.messages.create({
-      body: messageBody,
-      from: TWILIO_FROM_NUMBER,
-      to: toNumber,
+    const authString = Buffer.from(`${MOBILEMESSAGE_USERNAME}:${MOBILEMESSAGE_PASSWORD}`).toString("base64");
+    const response = await fetch("https://api.mobilemessage.com.au/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Basic ${authString}`
+      },
+      body: JSON.stringify({
+        messages: [
+          {
+            to: normalizedNumber,
+            message: messageBody,
+            sender: MOBILEMESSAGE_FROM
+          }
+        ]
+      })
     });
-    return { success: true, sid: msg.sid };
+    
+    if (!response.ok) {
+      const errorData = await response.text();
+      throw new Error(`MobileMessage API Error: ${response.status} ${response.statusText} - ${errorData}`);
+    }
+    
+    let responseData;
+    try {
+      responseData = await response.json();
+    } catch(e) {
+      // response might be empty or not json
+    }
+    
+    console.log(`[SMS] ✅ Successfully sent to ${normalizedNumber}`);
+    if (responseData) console.log(`[SMS]    ➤ API Response:`, JSON.stringify(responseData));
+    return { success: true, response: responseData };
   } catch (err) {
-    console.error("SMS send failed:", err.message);
+    console.error(`[SMS] ❌ Failed to send to ${normalizedNumber} — ${err.message}`);
     return { success: false, error: err.message };
   }
 }
@@ -6784,6 +6819,28 @@ Collect conversationally — NOT like a form. One detail at a time:
 - Any specific concerns
 
 =============================================================
+## Collecting Phone Numbers
+
+When asking for a phone number:
+1. Ask the caller to say their number digit by digit, or in groups — however feels natural to them.
+2. As you receive the number, mentally reconstruct it.
+3. ALWAYS read the number back to the caller exactly as they gave it — in the local format (e.g. "0412 345 678"), NOT with a country code or plus sign.
+4. Wait for explicit confirmation ("yes", "that's right", "correct") before proceeding.
+5. If they say no or correct you, ask them to repeat the full number again from the start.
+
+## Number Format Rules
+- Australian mobile numbers start with 04 and are 10 digits total (e.g. 0412 345 678).
+- NEVER add +61 or drop the leading zero.
+- When reading back, group as: 04XX XXX XXX (first 4, then 3, then 3).
+- If the caller says "61" at the start, drop it and prepend 0 instead.
+
+## Confirmation Script
+After collecting the number, say exactly:
+"Just to confirm, I have your number as [04XX XXX XXX] — is that correct?"
+
+Do not move on until you receive a clear "yes" or equivalent confirmation.
+
+=============================================================
 SPECIFIC USE CASES
 =============================================================
 
@@ -6935,8 +6992,7 @@ caller a link to the website instead of/as well as talking them through everythi
 
 If they say yes:
 1. Confirm their mobile number (use caller_phone if you already have it).
-2. Call the send_website_link tool with that number and a short note (e.g. the property address
-   or topic discussed).
+2. Call the send_sms tool with that number, message_type (e.g., rental_listing, application_process, general_enquiry), and a short note (e.g. the property address or topic discussed).
 3. Confirm briefly and ask if they need a transfer: "All done — that link's on its way to you now. Would you like me to transfer you to the reception for any further assistance?"
    - If they say yes: "No worries, I'll transfer you now." (Follow the transfer routing logic to reception).
    - If they say no: Ask, "Is there anything else you'd like to know?"
@@ -7169,25 +7225,30 @@ function getSaveCallLogTool() {
   };
 }
 
-function getSendWebsiteLinkTool() {
+function getSendSmsTool() {
   return {
     type: "function",
-    name: "send_website_link",
+    name: "send_sms",
     description:
-      "Texts the caller a link to the Ray White Bankstown website via SMS. Use when a caller agrees to be sent a link (e.g. for a new enquiry, a rental listing, or the application process).",
+      "Texts the caller a professional SMS message containing a link to the Ray White Bankstown website. Use when a caller agrees to be sent a link (e.g. for a new enquiry, a rental listing, or the application process).",
     parameters: {
       type: "object",
       properties: {
         caller_phone: {
           type: "string",
-          description: "Mobile number to send the text to, in a callable format e.g. +614XXXXXXXX",
+          description: "Mobile number the caller gives you to send the text to. Use Australian format e.g. 0412345678 or +61412345678 — the system will normalise it automatically.",
+        },
+        message_type: {
+          type: "string",
+          enum: ["rental_listing", "application_process", "general_enquiry"],
+          description: "The type of SMS message to send based on the caller's inquiry.",
         },
         note: {
           type: "string",
           description: "Optional short context to include, e.g. a property address or topic discussed",
         },
       },
-      required: ["caller_phone"],
+      required: ["caller_phone", "message_type"],
     },
   };
 }
@@ -7369,7 +7430,7 @@ function createRealtimeSession(sessionId, onEvent, extraInstructions = "") {
             },
           },
           instructions: getSystemPrompt() + (extraInstructions ? `\n\n${extraInstructions}` : ""),
-          tools: [getSaveCallLogTool(), getSendWebsiteLinkTool(), getTransferCallTool(), getLookupPropertyManagerTool()],
+          tools: [getSaveCallLogTool(), getSendSmsTool(), getTransferCallTool(), getLookupPropertyManagerTool()],
           tool_choice: "auto",
         },
       };
@@ -7597,11 +7658,7 @@ const pmFallbackData = [
 
 async function lookupPropertyManager(query) {
   const q = (query || "").toLowerCase();
-<<<<<<< Updated upstream
-  
-=======
 
->>>>>>> Stashed changes
   let source = "api";
   let searchData = [];
 
@@ -7627,11 +7684,7 @@ async function lookupPropertyManager(query) {
         throw new Error(`API returned ${response.status}`);
       }
       const data = await response.json();
-<<<<<<< Updated upstream
-      
-=======
 
->>>>>>> Stashed changes
       const arraysToSearch = [
         data.residentialRent?.tenancies,
         data.residentialInvoices?.tenancies,
@@ -7641,11 +7694,7 @@ async function lookupPropertyManager(query) {
       ];
 
       const allTenancies = arraysToSearch.flat().filter(Boolean);
-<<<<<<< Updated upstream
-      
-=======
 
->>>>>>> Stashed changes
       const uniqueAddresses = new Set();
       searchData = [];
       for (const t of allTenancies) {
@@ -7656,11 +7705,7 @@ async function lookupPropertyManager(query) {
           }
         }
       }
-<<<<<<< Updated upstream
-      
-=======
 
->>>>>>> Stashed changes
       if (searchData.length > 0) {
         pmCache.data = searchData;
         pmCache.timestamp = now;
@@ -7679,13 +7724,8 @@ async function lookupPropertyManager(query) {
     }
   }
 
-<<<<<<< Updated upstream
-  const found = searchData.find(d => 
-    d.address.toLowerCase().includes(q) || 
-=======
   const found = searchData.find(d =>
     d.address.toLowerCase().includes(q) ||
->>>>>>> Stashed changes
     d.pmName.toLowerCase().includes(q)
   );
 
@@ -7732,11 +7772,7 @@ async function handleLookupPropertyManager(sessionId, call) {
   try {
     const args = typeof call.arguments === "string" ? JSON.parse(call.arguments) : call.arguments;
     console.log(`[${sessionId}] Looking up property manager | query: ${args.query}`);
-<<<<<<< Updated upstream
-    
-=======
 
->>>>>>> Stashed changes
     const result = await lookupPropertyManager(args.query);
     console.log(`[${sessionId}] Lookup result:`, result);
 
@@ -7748,7 +7784,10 @@ async function handleLookupPropertyManager(sessionId, call) {
         output: JSON.stringify(result)
       }
     });
-    sendWsJson(session.ws, { type: "response.create" });
+    if (!session.isResponseActive) {
+      session.isResponseActive = true;
+      sendWsJson(session.ws, { type: "response.create" });
+    }
   } catch (err) {
     if (callId) session.processedCallIds.delete(callId);
     console.error(`[${sessionId}] Error looking up property manager:`, err);
@@ -7924,8 +7963,8 @@ async function handleFunctionCall(sessionId, eventOrItem) {
 
   if (call.name === "save_call_log") {
     await handleSaveCallLog(sessionId, call);
-  } else if (call.name === "send_website_link") {
-    await handleSendWebsiteLink(sessionId, call);
+  } else if (call.name === "send_sms") {
+    await handleSendSms(sessionId, call);
   } else if (call.name === "lookupPropertyManager") {
     await handleLookupPropertyManager(sessionId, call);
   } else if (call.name === "transfer_call") {
@@ -7993,7 +8032,10 @@ async function handleSaveCallLog(sessionId, call) {
       },
     });
 
-    sendWsJson(session.ws, { type: "response.create" });
+    if (!session.isResponseActive) {
+      session.isResponseActive = true;
+      sendWsJson(session.ws, { type: "response.create" });
+    }
     session.onEvent({ type: "call-logged", data: args });
   } catch (err) {
     if (callId) session.processedCallIds.delete(callId);
@@ -8001,7 +8043,7 @@ async function handleSaveCallLog(sessionId, call) {
   }
 }
 
-async function handleSendWebsiteLink(sessionId, call) {
+async function handleSendSms(sessionId, call) {
   const session = sessions.get(sessionId);
   if (!session) return;
 
@@ -8013,11 +8055,27 @@ async function handleSendWebsiteLink(sessionId, call) {
   try {
     const args = JSON.parse(call.arguments);
     const note = args.note ? ` (${args.note})` : "";
-    const messageBody = `Ray White Bankstown${note}: ${AGENCY_WEBSITE_URL}`;
+    
+    // Website URL is taken from AGENCY_WEBSITE_URL
+    const websiteUrl = AGENCY_WEBSITE_URL;
+    let messageBody = "";
+    
+    switch (args.message_type) {
+      case "rental_listing":
+        messageBody = `Hi from Ray White Bankstown. For details, photos, and to book an inspection${note}, please visit: ${websiteUrl}`;
+        break;
+      case "application_process":
+        messageBody = `Hi from Ray White Bankstown. You can submit your rental application online through our secure portal here: ${websiteUrl}`;
+        break;
+      case "general_enquiry":
+      default:
+        messageBody = `Hi from Ray White Bankstown. For more information, please visit our website: ${websiteUrl}`;
+        break;
+    }
 
-    console.log(`[${sessionId}] Sending website link SMS to ${args.caller_phone}`);
+    console.log(`[${sessionId}] Sending SMS (${args.message_type}) to ${args.caller_phone}`);
 
-    const result = await sendSmsLink(args.caller_phone, messageBody);
+    const result = await sendSms(args.caller_phone, messageBody);
 
     sendWsJson(session.ws, {
       type: "conversation.item.create",
@@ -8026,17 +8084,20 @@ async function handleSendWebsiteLink(sessionId, call) {
         call_id: call.call_id,
         output: JSON.stringify(
           result.success
-            ? { success: true, message: "Website link texted to caller." }
+            ? { success: true, message: "SMS texted to caller." }
             : { success: false, message: "Could not send the text — let the caller know and offer another way to help." }
         ),
       },
     });
 
-    sendWsJson(session.ws, { type: "response.create" });
+    if (!session.isResponseActive) {
+      session.isResponseActive = true;
+      sendWsJson(session.ws, { type: "response.create" });
+    }
     session.onEvent({ type: "sms-sent", data: { caller_phone: args.caller_phone, success: result.success } });
   } catch (err) {
     if (callId) session.processedCallIds.delete(callId);
-    console.error(`[${sessionId}] send_website_link failed:`, err.message);
+    console.error(`[${sessionId}] send_sms failed:`, err.message);
   }
 }
 
@@ -8364,16 +8425,17 @@ startAudioSocketServer({
     // Give the AI a heads-up about which line this call landed on. It's
     // appended to the standard system prompt, not a replacement for it —
     // the call flow, tools, and hard rules above still apply as-is.
+
     const extraInstructions = callContext.label
       ? `=============================================================
-CALL CONTEXT — TELEPHONY LINE INFO
-=============================================================
-This call arrived via 3CX/Asterisk on the "${callContext.label}" line` +
+    CALL CONTEXT — TELEPHONY LINE INFO
+    =============================================================
+    This call arrived via 3CX/Asterisk on the "${callContext.label}" line` +
       (callContext.extension ? ` (internal extension ${callContext.extension})` : "") +
       (callContext.did ? `, DID ${callContext.did}` : "") +
       `. Treat this the same as any inbound call to the front desk unless
-you're told otherwise for this specific line — this is currently just
-routing metadata for logging/testing, not a behavioural instruction.`
+    you're told otherwise for this specific line — this is currently just
+    routing metadata for logging/testing, not a behavioural instruction.`
       : "";
 
     const forwarder = (event) => {
@@ -8472,7 +8534,7 @@ server.listen(PORT, () => {
 ║   Voice ID:       ${ELEVENLABS_VOICE_ID}                     ║
 ║   Recordings Dir:  ${RECORDINGS_DIR}                         ║
 ║   MongoDB:         ${MONGODB_URI ? "✓ Set" : "✗ Missing"}                             ║
-║   Twilio SMS:      ${twilioClient ? "✓ Set" : "✗ Simulated (log only)"}                ║
+║   MobileMessage:   ${MOBILEMESSAGE_USERNAME && MOBILEMESSAGE_PASSWORD ? "✓ Set" : "✗ Simulated (log only)"}                ║
 ║   Office Number:   ${OFFICE_MAIN_NUMBER || "not configured"}                          ║
 ║   Telephony:       AudioSocket bridge on 127.0.0.1:8090       ║
 ╚══════════════════════════════════════════════════════════════╝

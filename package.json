@@ -4,8 +4,8 @@
   "description": "SW Brokerage Refinance Voice Agent - Express.js + OpenAI Realtime + ElevenLabs TTS",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node server.js"
+    "start": "node index.js",
+    "dev": "node index.js"
   },
   "dependencies": {
     "dotenv": "^16.3.1",
