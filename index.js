@@ -6515,19 +6515,19 @@ async function sendSms(toNumber, messageBody) {
         ]
       })
     });
-    
+
     if (!response.ok) {
       const errorData = await response.text();
       throw new Error(`MobileMessage API Error: ${response.status} ${response.statusText} - ${errorData}`);
     }
-    
+
     let responseData;
     try {
       responseData = await response.json();
-    } catch(e) {
+    } catch (e) {
       // response might be empty or not json
     }
-    
+
     console.log(`[SMS] ✅ Successfully sent to ${normalizedNumber}`);
     if (responseData) console.log(`[SMS]    ➤ API Response:`, JSON.stringify(responseData));
     return { success: true, response: responseData };
@@ -6717,9 +6717,40 @@ destination: "john"
   (This is a demo staff member for testing purposes)
 
 destination: "afterhours"
-→ Use for: calls outside business hours, after hours enquiries,
-  Farah Antone, Michelle Clay, Mary, Matthew Natoli,
-  or any Property Manager
+→ Use ONLY as a last resort when a PM is needed but you cannot identify which one
+
+destination: "anessa"
+→ Use when: caller asks for Anessa McGrath, or lookupPropertyManager returns "Anessa McGrath"
+
+destination: "chelsea"
+→ Use when: caller asks for Chelsea Moussa
+
+destination: "eleena"
+→ Use when: caller asks for Eleena Bassam El-Sous, or lookupPropertyManager returns "Eleena Bassam El-Sous"
+
+destination: "ethan"
+→ Use when: caller asks for Ethan Tran
+
+destination: "farah"
+→ Use when: caller asks for Farah Antown, or lookupPropertyManager returns "Farah Antown"
+
+destination: "jessie"
+→ Use when: caller asks for Jessie Hodkinson, or lookupPropertyManager returns "Jessie Hodkinson"
+
+destination: "mary"
+→ Use when: caller asks for Mary Azzi, or lookupPropertyManager returns "Mary Azzi"
+
+destination: "matthew"
+→ Use when: caller asks for Matthew Natoli, or lookupPropertyManager returns "Matthew Natoli"
+
+destination: "michelle"
+→ Use when: caller asks for Michelle Clay, or lookupPropertyManager returns "Michelle Clay"
+
+destination: "noa"
+→ Use when: caller asks for Noa Callus
+
+destination: "zena"
+→ Use when: caller asks for Zena Issa
 
 IMPORTANT RULES:
 - CRITICAL: You MUST generate the verbal acknowledgment AND call the transfer_call tool IN THE EXACT SAME TURN.
@@ -6731,6 +6762,7 @@ IMPORTANT RULES:
   "afterhours" (they share the same queue for this demo)
 - If caller asks for reception, main office, or any Sales Agent, 
   use destination: "reception"
+- Only use destination: "afterhours" when a PM is needed but cannot be identified
 - After calling transfer_call, say nothing further — the call will 
   be handed off
 
@@ -6821,22 +6853,35 @@ Collect conversationally — NOT like a form. One detail at a time:
 =============================================================
 ## Collecting Phone Numbers
 
-When asking for a phone number:
-1. Ask the caller to say their number digit by digit, or in groups — however feels natural to them.
+STEP 1 — CHECK METADATA FIRST
+You may have been given the caller's number from the telephone network in the
+CALL CONTEXT block above. If you have it:
+- Do NOT ask them to recite a number unprompted.
+- When the moment comes to collect a number, ask:
+  "Would you like me to send that to the number you're calling from?"
+- YES → use that number immediately, skip to confirmation.
+- NO → proceed to STEP 2 below.
+
+STEP 2 — COLLECT MANUALLY (only if metadata missing or caller said no)
+1. Ask the caller to say their number digit by digit, or in groups — however
+   feels natural to them.
 2. As you receive the number, mentally reconstruct it.
-3. ALWAYS read the number back to the caller exactly as they gave it — in the local format (e.g. "0412 345 678"), NOT with a country code or plus sign.
+3. ALWAYS read the number back to the caller exactly as they gave it —
+   in local format (e.g. "0412 345 678"), NOT with a country code or plus sign.
 4. Wait for explicit confirmation ("yes", "that's right", "correct") before proceeding.
-5. If they say no or correct you, ask them to repeat the full number again from the start.
+5. If they say no or correct you, ask them to repeat the full number from the start.
 
 ## Number Format Rules
 - Australian mobile numbers start with 04 and are 10 digits total (e.g. 0412 345 678).
-- NEVER add +61 or drop the leading zero.
-- When reading back, group as: 04XX XXX XXX (first 4, then 3, then 3).
+- NEVER say "+61" or "plus" out loud — always read back in local format.
+- When reading back an Australian number, group as: 04XX XXX XXX.
 - If the caller says "61" at the start, drop it and prepend 0 instead.
+- International numbers from metadata (e.g. +923092836265) — read back digit by
+  digit in natural groups, never announce the plus or country code label.
 
 ## Confirmation Script
-After collecting the number, say exactly:
-"Just to confirm, I have your number as [04XX XXX XXX] — is that correct?"
+After collecting or confirming the number, say:
+"Just to confirm, I'll send that to [number as spoken naturally] — is that right?"
 
 Do not move on until you receive a clear "yes" or equivalent confirmation.
 
@@ -7614,46 +7659,49 @@ let pmCache = {
 };
 
 const pmFallbackData = [
-  { "pmName": "Samir Ramjali", "address": "25A Ambon Road, Holsworthy" },
-  { "pmName": "Maria Ciampa", "address": "4/30-34 Sir Joseph Banks Street, Bankstown" },
-  { "pmName": "Jaytee Nguyen", "address": "1/265 Miller Road, Bass Hill" },
-  { "pmName": "Ruba Arifaki & Bilal Arifaki", "address": "18 Rabaul Road, Georges Hall" },
-  { "pmName": "Nahla Lababidi", "address": "6/199 Auburn Road, Yagoona" },
-  { "pmName": "Akel Assaad", "address": "1E Fenwick Street, Yagoona" },
-  { "pmName": "Alah Arian & Trent Douglas Elford-Ciantar", "address": "2/3 Ellis Street, Condell Park" },
-  { "pmName": "Yasser Ibrahim El-Hussein", "address": "58 Marden Street, Georges Hall" },
-  { "pmName": "Nur Syafiqah Binti Badhrul Nizam", "address": "13/30-34 Sir Joseph Banks Street, Bankstown" },
-  { "pmName": "Houssien Goumrawi", "address": "72 Military Road, Merrylands" },
-  { "pmName": "Mark El-Ali", "address": "32 Verbena Avenue, Bankstown" },
-  { "pmName": "Osama Mahmoud Mohamed Allam", "address": "36/30-34 Sir Joseph Banks Street, Bankstown" },
-  { "pmName": "Ngoc Anh Nguyen & Lisa Latsombath", "address": "76A Edgar Street, Bankstown" },
-  { "pmName": "Emad Al Daya & Amal Al Daya", "address": "148 Marion Street, Bankstown" },
-  { "pmName": "Md Mamun-Ur-Rashid Khan", "address": "11A Conway Road, Bankstown" },
-  { "pmName": "Ahmad Daoud & Emma Allan", "address": "1/1 Eldon Avenue, Georges Hall" },
-  { "pmName": "Julie Najem", "address": "60 Jacaranda Drive, Georges Hall" },
-  { "pmName": "John Blackley", "address": "1/243 Canterbury Road, Bankstown" },
-  { "pmName": "Tony Naasa & Meera Derbas", "address": "58 Jocelyn Street, Chester Hill" },
-  { "pmName": "Alaa Houblos", "address": "37/30-34 Sir Joseph Banks Street, Bankstown" },
-  { "pmName": "Daniel Rapana", "address": "88/169 Horsley Road, Panania" },
-  { "pmName": "Patricia Kamara and Tigidankay Kamara", "address": "44 Cann Street, Bass Hill" },
-  { "pmName": "Dian Wahyu Putra & Dadang Wiraguna", "address": "20 Beale Street, Georges Hall" },
-  { "pmName": "Rodney and Gordana Van Schellbeck", "address": "3A English Street, Revesby" },
-  { "pmName": "Maysa Arja", "address": "115 Macquarie Street, Greenacre" },
-  { "pmName": "Alkhair Ammar & Alia Osman", "address": "4/11-13 Resthaven Road, Bankstown" },
-  { "pmName": "Silvana El kassar & Ayman Jamella Maryam", "address": "19A Verbena Avenue, Bankstown" },
-  { "pmName": "Ms Fadileh Chahal & Mr Khaled Melhem", "address": "A301/4 French Avenue, Bankstown" },
-  { "pmName": "Omar Yehia & Hoda Marhaba", "address": "3 Hargreaves Street, Condell Park" },
-  { "pmName": "Abir Dergham & Suliman Zakka", "address": "2 Lambert Street, Yagoona" },
-  { "pmName": "Shakib Ashik", "address": "7/2-4 Myrtle Road, Bankstown" },
-  { "pmName": "Zoe Hassoun, Mariah Tahan & Khaled Tahan", "address": "35A Myall Street, Punchbowl" },
-  { "pmName": "Abdul Rafay and Muhammad Qamar", "address": "22 Polo Street, Revesby" },
-  { "pmName": "Elenor Latu & Tamara Latu & Anaseini Latu", "address": "14 Greater Circuit, Bass Hill" },
-  { "pmName": "Laurette Batthani", "address": "16 Henry Street, Punchbowl" },
-  { "pmName": "Raheel Khan", "address": "B502/75 Rickard Road, Bankstown" },
-  { "pmName": "Mr Ahmad Al Ahmad", "address": "31 Brancourt Avenue, Bankstown" },
-  { "pmName": "Jannatul Tamil", "address": "6/110 Lakemba Street, Lakemba" },
-  { "pmName": "Mohamed Alameddine", "address": "B302/17 Hanna Street, Potts Hill" },
-  { "pmName": "Bula Management Pty Ltd", "address": "374 Chapel Road, Bankstown" }
+  { "pmName": "Eleena Bassam El-Sous", "address": "25A Ambon Road, Holsworthy" },
+  { "pmName": "Mary Azzi", "address": "4/30-34 Sir Joseph Banks Street, Bankstown" },
+  { "pmName": "Anessa McGrath", "address": "1/265 Miller Road, Bass Hill" },
+  { "pmName": "Mary Azzi", "address": "18 Rabaul Road, Georges Hall" },
+  { "pmName": "Farah Antown", "address": "6/199 Auburn Road, Yagoona" },
+  { "pmName": "Farah Antown", "address": "1E Fenwick Street, Yagoona" },
+  { "pmName": "Mary Azzi", "address": "2/3 Ellis Street, Condell Park" },
+  { "pmName": "Farah Antown", "address": "72 Military Road, Merrylands" },
+  { "pmName": "Mary Azzi", "address": "32 Verbena Avenue, Bankstown" },
+  { "pmName": "Michelle Clay", "address": "60 Jacaranda Drive, Georges Hall" },
+  { "pmName": "Anessa McGrath", "address": "45 Glassop Street, Yagoona, NSW 2199" },
+  { "pmName": "Farah Antown", "address": "148 Marion Street, Bankstown, NSW 2200" },
+  { "pmName": "Farah Antown", "address": "8A Leighdon Street, Bass Hill, NSW 2197" },
+  { "pmName": "Farah Antown", "address": "11A Conway Road, Bankstown, NSW 2200" },
+  { "pmName": "Farah Antown", "address": "28/57 Bellevue Avenue, Georges Hall, NSW 2198 " },
+  { "pmName": "Mary Azzi", "address": "134A Waterloo Road, GREENACRE, NSW 2190" },
+  { "pmName": "Mary Azzi", "address": "1/243 Canterbury Road, Bankstown, NSW 2200 " },
+  { "pmName": "Michelle Clay", "address": "58 Jocelyn Street, Chester Hill, NSW 2162" },
+  { "pmName": "Anessa McGrath", "address": "10/13-15 Gordon Street, Bankstown, NSW 2200" },
+  { "pmName": "Mary Azzi", "address": "37/30-34 Sir Joseph Banks Street, Bankstown, NSW 2200" },
+  { "pmName": "Michelle Clay", "address": "407/36 Kitchener Parade, Bankstown, NSW 2200" },
+  { "pmName": "Matthew Natoli", "address": "374 Chapel Road, Bankstown, NSW 2200 " },
+  { "pmName": "Jessie Hodkinson", "address": "88/169 Horsley Road, PANANIA, NSW 2213" },
+  { "pmName": "Farah Antown", "address": "44 Cann Street, Bass Hill, NSW 2197" },
+  { "pmName": "Mary Azzi", "address": "20 Beale Street, Georges Hall, NSW 2198 " },
+  { "pmName": "Farah Antown", "address": "3A English Street, Revesby, NSW 2212" },
+  { "pmName": "Mary Azzi", "address": "4/11-13 Resthaven Road, Bankstown, NSW 2200 " },
+  { "pmName": "Mary Azzi", "address": "19A Verbena Avenue, Bankstown, NSW 2200 " },
+  { "pmName": "Jessie Hodkinson", "address": "A301/4 French Avenue, Bankstown, NSW 2200" },
+  { "pmName": "Mary Azzi", "address": "3 Hargreaves Street, Condell Park, NSW 2200" },
+  { "pmName": "Farah Antown", "address": "115 Macquarie Street, Greenacre, NSW 2190" },
+  { "pmName": "Anessa McGrath", "address": "7/2-4 Myrtle Road, Bankstown, NSW 2200 " },
+  { "pmName": "Mary Azzi", "address": "35A Myall Street, Punchbowl, NSW 2196" },
+  { "pmName": "Eleena Bassam El-Sous", "address": "22 Polo Street, Revesby, NSW 2212" },
+  { "pmName": "Mary Azzi", "address": "14 Greater Circuit, Bass Hill, NSW 2197" },
+  { "pmName": "Jessie Hodkinson", "address": "B502/75 Rickard Road, Bankstown, NSW 2200" },
+  { "pmName": "Mary Azzi", "address": "31 Brancourt Avenue, Bankstown, NSW 2200 " },
+  { "pmName": "Mary Azzi", "address": "6/110 Lakemba Street, Lakemba, NSW 2195 " },
+  { "pmName": "Mary Azzi", "address": "B302/17 Hanna Street, Potts Hill, NSW 2143 " },
+  { "pmName": "Mary Azzi", "address": "205/106 Brancourt Avenue, Yagoona, NSW 2199" },
+  { "pmName": "Eleena Bassam El-Sous", "address": "2 Lambert Street, Yagoona, NSW 2199" },
+  { "pmName": "Eleena Bassam El-Sous", "address": "205/106 Brancourt Avenue, Yagoona, NSW 2199" },
+
 ];
 
 async function lookupPropertyManager(query) {
@@ -7806,9 +7854,30 @@ function getTransferCallTool() {
       properties: {
         destination: {
           type: "string",
-          enum: ["reception", "john", "afterhours"],
+          enum: [
+            "reception",
+            "john",
+            "afterhours",
+            "anessa",
+            "chelsea",
+            "eleena",
+            "ethan",
+            "farah",
+            "jessie",
+            "mary",
+            "matthew",
+            "michelle",
+            "noa",
+            "zena"
+          ],
           description:
-            "Where to transfer the call. Use 'reception' for general enquiries, buying, selling, application status. Use 'john' when caller asks for John specifically. Use 'afterhours' outside business hours.",
+            "Where to transfer the call. Use 'reception' for general enquiries, buying, selling, new landlords, application status, Directors, Sales Agents. " +
+            "Use 'afterhours' only as a last resort when a PM is needed but cannot be identified. " +
+            "Use the person's first name key when caller names a specific staff member or lookupPropertyManager returns their name. " +
+            "Key mapping: anessa=Anessa McGrath, chelsea=Chelsea Moussa, eleena=Eleena Bassam El-Sous, " +
+            "ethan=Ethan Tran, farah=Farah Antown, jessie=Jessie Hodkinson, mary=Mary Azzi, " +
+            "matthew=Matthew Natoli, michelle=Michelle Clay, noa=Noa Callus, zena=Zena Issa. " +
+            "Use 'john' only when caller explicitly asks for John.",
         },
         reason: {
           type: "string",
@@ -8055,11 +8124,11 @@ async function handleSendSms(sessionId, call) {
   try {
     const args = JSON.parse(call.arguments);
     const note = args.note ? ` (${args.note})` : "";
-    
+
     // Website URL is taken from AGENCY_WEBSITE_URL
     const websiteUrl = AGENCY_WEBSITE_URL;
     let messageBody = "";
-    
+
     switch (args.message_type) {
       case "rental_listing":
         messageBody = `Hi from Ray White Bankstown. For details, photos, and to book an inspection${note}, please visit: ${websiteUrl}`;
@@ -8401,11 +8470,19 @@ app.get("/api/telephony/register-call", (req, res) => {
   if (!uuid) {
     return res.status(400).json({ success: false, error: "uuid is required" });
   }
+  // Normalise callerid: ensure it always has a leading +
+  // Asterisk/3CX sends numbers like 923092836265 (no +)
+  let normalisedCallerid = null;
+  if (callerid) {
+    const digits = String(callerid).replace(/\s+/g, "").replace(/^\+/, "");
+    normalisedCallerid = "+" + digits;
+  }
+
   callContexts.set(uuid, {
     did: did || null,
     label: label || null,
     extension: extension || null,
-    callerid: callerid || null,
+    callerid: normalisedCallerid,
     registeredAt: Date.now(),
   });
   console.log(
@@ -8426,17 +8503,50 @@ startAudioSocketServer({
     // appended to the standard system prompt, not a replacement for it —
     // the call flow, tools, and hard rules above still apply as-is.
 
-    const extraInstructions = callContext.label
-      ? `=============================================================
-    CALL CONTEXT — TELEPHONY LINE INFO
-    =============================================================
-    This call arrived via 3CX/Asterisk on the "${callContext.label}" line` +
+    // const extraInstructions = callContext.label
+    //   ? `=============================================================
+    // CALL CONTEXT — TELEPHONY LINE INFO
+    // =============================================================
+    // This call arrived via 3CX/Asterisk on the "${callContext.label}" line` +
+    //   (callContext.extension ? ` (internal extension ${callContext.extension})` : "") +
+    //   (callContext.did ? `, DID ${callContext.did}` : "") +
+    //   `. Treat this the same as any inbound call to the front desk unless
+    // you're told otherwise for this specific line — this is currently just
+    // routing metadata for logging/testing, not a behavioural instruction.`
+    //   : "";
+
+    const extraInstructions = `=============================================================
+CALL CONTEXT — TELEPHONY LINE INFO
+=============================================================
+This call arrived via 3CX/Asterisk on the "${callContext.label || "unknown"}" line` +
       (callContext.extension ? ` (internal extension ${callContext.extension})` : "") +
       (callContext.did ? `, DID ${callContext.did}` : "") +
-      `. Treat this the same as any inbound call to the front desk unless
-    you're told otherwise for this specific line — this is currently just
-    routing metadata for logging/testing, not a behavioural instruction.`
-      : "";
+      `.` +
+      (callContext.callerid ? `
+
+=============================================================
+CALLER METADATA — PHONE NUMBER FROM NETWORK
+=============================================================
+The telephone network has identified the caller's number as: ${callContext.callerid}
+This is the number they are physically calling FROM.
+
+IMPORTANT — USE THIS NUMBER SMARTLY:
+- When the conversation reaches the point of collecting a phone number for SMS,
+  do NOT ask them to recite their number first.
+- Instead, ask: "Would you like me to send that to the number you're calling from?"
+- If they say YES: use ${callContext.callerid} as caller_phone in send_sms — no further
+  number collection needed.
+- If they say NO or want a different number: THEN ask them to provide a number,
+  and follow the existing number collection flow (read back, confirm, etc.).
+- When reading the number back to confirm, say it naturally digit by digit —
+  do NOT say "plus" or announce the country code prefix robotically.
+  e.g. for +61404838242 say: "six one four, zero four zero, four eight three, eight two four two."
+- The sendSms function already handles the + prefix, so pass ${callContext.callerid} as-is.
+` : `
+
+No caller ID was passed by the network for this call. Follow the standard number
+collection flow — ask them to provide their number, read it back, and confirm.
+`);
 
     const forwarder = (event) => {
       switch (event.type) {
