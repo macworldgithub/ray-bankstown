@@ -6930,8 +6930,9 @@ Covers buyers asking about a property that's for sale, and any general sales enq
 about the caller's own property. Do NOT try to answer detailed sales questions yourself or book
 anything — this always goes to a Sales Agent.
 
-First ask: "No worries — do you happen to know which of our sales agents you've been dealing with,
-or was working this listing?"
+First ask: "No worries — could you give me the name of the sales agent you've been dealing with?"
+- Wait for them to provide a name. Do NOT offer names as options unless they say they can't remember.
+- If they say "yes I know" but don't give the name, follow up: "Great — what's their name?"
 
 - If they name a known Sales Agent (Joshua Nassif or Jordon Le Breux) or a Director:
   "I'll transfer your call to [name], please make sure to leave a message if [name] isn't available."
@@ -6966,24 +6967,32 @@ the main office instead. Always log with intent_category: "staff_transfer".
 ─────────────────────────────────────────────
 USE CASE: TENANT INQUIRIES / MAINTENANCE
 ─────────────────────────────────────────────
-An existing tenant with a question or maintenance issue. Keep it simple — your job is to work out
-who their Property Manager is and get them transferred, not to log the issue with the PM yourself.
+An existing tenant with a question or maintenance issue. Your job is to
+identify the Property Manager and transfer — nothing else.
 
-1. Collect: name, property address, and (briefly) the nature of the issue — just enough to route
-   the call, not a full maintenance report.
-2. Try to identify the Property Manager for that property (ask the caller if they know who they've
-   been dealing with — Farah, Michelle, Mary, or Matthew — or use context if it's clear).
-3. If a Property Manager can be identified:
-   "I'll transfer your call to [PM name], please make sure to leave a message if [PM name] isn't available."
-4. If you can't determine who the Property Manager is:
-   "No worries — I'll transfer you to our main office now so someone can help, one moment."
+1. Collect: name, property address, and briefly the nature of the issue.
+2. Try BOTH methods to identify the PM — in this order:
+   a. Ask the caller: "Do you know the name of your property manager?"
+      - If they give a name → use that, go to step 3.
+   b. If they don't know → call lookupPropertyManager with the property address.
+      - If found → go to step 3.
+      - If not found → transfer to reception.
+3. Once PM is identified by either method:
+   "I'll transfer your call to [PM full name], please make sure to leave a
+   message if [PM full name] isn't available."
+   Then call transfer_call with the correct destination.
 
-Do NOT email or text the property manager on the caller's behalf at this stage — this is a
-transfer-only flow. For genuinely urgent issues (locked out, emergency, safety risk), still follow
-this same routing but flag it as urgent verbally when you hand off, and log escalated: true.
+For urgent issues (locked out, no hot water, safety risk):
+- Still follow steps 1–3 above, do NOT skip straight to reception.
+- Flag it verbally: "I can see this is urgent — let me get you straight
+  through to your property manager."
+- Log escalated: true.
 
-Log intent_category: "tenant_inquiry", outcome: "transferred" (or "escalated" for urgent/safety
-issues), staff_requested set to the PM's name if identified.
+Do NOT email or text the PM — this is a transfer-only flow.
+Do NOT skip to reception without trying both identification methods first.
+
+Log intent_category: "tenant_inquiry", outcome: "transferred" (or "escalated"
+for urgent/safety issues), staff_requested set to the PM's name if identified.
 
 ─────────────────────────────────────────────
 USE CASE: RENTAL APPLICATION FOLLOW-UP
@@ -7173,6 +7182,24 @@ HOW TO USE:
 - Pass whatever the caller said (address OR name) as the query
 - If found: You MUST first speak EXACTLY this phrase out loud: "Your property manager is [pmName]. I am transferring you to them now, one moment." THEN, in the EXACT SAME TURN, call transfer_call with the destination set to the PM's first name (e.g., "anessa", "noa").
 - If not found: You MUST first speak EXACTLY this phrase out loud: "I wasn't able to find that property. I am transferring you to our team now." THEN, in the EXACT SAME TURN, call transfer_call(destination: "afterhours").
+
+=============================================================
+AMBIGUOUS NAMES — ALWAYS CLARIFY BEFORE TRANSFERRING
+=============================================================
+The following first names have multiple staff members. ALWAYS ask for
+the last name or department before transferring — never assume:
+
+- Anthony: could be Anthony Roumanous (ext 120), Anthony Jaja (ext 126), or Anthony Cham (ext 146)
+  → Ask: "We have a few people named Anthony — could you give me their last name or tell me which department?"
+
+- Patrick: could be Patrick Sioud (ext 136) or Patrick Liu (ext 133)
+  → Ask: "We have two Patricks — is that Patrick Sioud or Patrick Liu?"
+
+- James: could be James Huang (ext 137) or James Duong (ext 138)
+  → Ask: "We have two people named James — is that James Huang or James Duong?"
+
+NEVER transfer to reception as a fallback for an ambiguous name —
+always ask the clarifying question first.
 
 =============================================================
 HARD RULES — NON-NEGOTIABLE
@@ -7656,122 +7683,326 @@ let pmCache = {
 };
 
 const pmFallbackData = [
-  { "pmName": "Eleena Bassam El-Sous", "address": "25A Ambon Road, Holsworthy" },
-  { "pmName": "Mary Azzi", "address": "4/30-34 Sir Joseph Banks Street, Bankstown" },
-  { "pmName": "Anessa McGrath", "address": "1/265 Miller Road, Bass Hill" },
-  { "pmName": "Mary Azzi", "address": "18 Rabaul Road, Georges Hall" },
-  { "pmName": "Farah Antown", "address": "6/199 Auburn Road, Yagoona" },
-  { "pmName": "Farah Antown", "address": "1E Fenwick Street, Yagoona" },
-  { "pmName": "Mary Azzi", "address": "2/3 Ellis Street, Condell Park" },
-  { "pmName": "Farah Antown", "address": "72 Military Road, Merrylands" },
-  { "pmName": "Mary Azzi", "address": "32 Verbena Avenue, Bankstown" },
-  { "pmName": "Michelle Clay", "address": "60 Jacaranda Drive, Georges Hall" },
+  { "pmName": "Eleena Bassam El-Sous", "address": "25A Ambon Road, Holsworthy, NSW 2173" },
+  { "pmName": "Mary Azzi", "address": "4/30-34 Sir Joseph Banks Street, Bankstown, NSW 2200" },
+  { "pmName": "Anessa McGrath", "address": "1/265 Miller Road, Bass Hill, NSW 2197" },
+  { "pmName": "Mary Azzi", "address": "18 Rabaul Road, Georges Hall, NSW 2198" },
+  { "pmName": "Farah Antown", "address": "6/199 Auburn Road, Yagoona, NSW 2199" },
+  { "pmName": "Farah Antown", "address": "1E Fenwick Street, Yagoona, NSW 2199" },
+  { "pmName": "Mary Azzi", "address": "2/3 Ellis Street, Condell Park, NSW 2200" },
   { "pmName": "Anessa McGrath", "address": "45 Glassop Street, Yagoona, NSW 2199" },
-  { "pmName": "Farah Antown", "address": "148 Marion Street, Bankstown, NSW 2200" },
+  { "pmName": "Farah Antown", "address": "72 Military Road, Merrylands, NSW 2160" },
   { "pmName": "Farah Antown", "address": "8A Leighdon Street, Bass Hill, NSW 2197" },
   { "pmName": "Farah Antown", "address": "11A Conway Road, Bankstown, NSW 2200" },
-  { "pmName": "Farah Antown", "address": "28/57 Bellevue Avenue, Georges Hall, NSW 2198 " },
-  { "pmName": "Mary Azzi", "address": "134A Waterloo Road, GREENACRE, NSW 2190" },
-  { "pmName": "Mary Azzi", "address": "1/243 Canterbury Road, Bankstown, NSW 2200 " },
+  { "pmName": "Farah Antown", "address": "148 Marion Street, Bankstown, NSW 2200" },
+  { "pmName": "Farah Antown", "address": "28/57 Bellevue Avenue, Georges Hall, NSW 2198" },
+  { "pmName": "Mary Azzi", "address": "134A Waterloo Road, Greenacre, NSW 2190" },
+  { "pmName": "Mary Azzi", "address": "1/243 Canterbury Road, Bankstown, NSW 2200" },
   { "pmName": "Michelle Clay", "address": "58 Jocelyn Street, Chester Hill, NSW 2162" },
   { "pmName": "Anessa McGrath", "address": "10/13-15 Gordon Street, Bankstown, NSW 2200" },
   { "pmName": "Mary Azzi", "address": "37/30-34 Sir Joseph Banks Street, Bankstown, NSW 2200" },
   { "pmName": "Michelle Clay", "address": "407/36 Kitchener Parade, Bankstown, NSW 2200" },
-  { "pmName": "Matthew Natoli", "address": "374 Chapel Road, Bankstown, NSW 2200 " },
-  { "pmName": "Jessie Hodkinson", "address": "88/169 Horsley Road, PANANIA, NSW 2213" },
+  { "pmName": "Mary Azzi", "address": "28/30-34 Sir Joseph Banks Street, Bankstown, NSW 2200" },
+  { "pmName": "Mary Azzi", "address": "32 Verbena Avenue, Bankstown, NSW 2200" },
+  { "pmName": "Michelle Clay", "address": "39 Jocelyn Street, Chester Hill, NSW 2162" },
+  { "pmName": "Michelle Clay", "address": "60 Jacaranda Drive, Georges Hall, NSW 2198" },
+  { "pmName": "Farah Antown", "address": "15 Bulwarra Avenue, Sefton, NSW 2162" },
+  { "pmName": "Farah Antown", "address": "89 Oak Drive, Georges Hall, NSW 2198" },
+  { "pmName": "Jessie Hodkinson", "address": "2 Olympic Parade, Bankstown, NSW 2200" },
+  { "pmName": "Mary Azzi", "address": "11/122 Meredith Street, Bankstown, NSW 2200" },
+  { "pmName": "Mary Azzi", "address": "2/73 Denman Avenue, Wiley Park, NSW 2195" },
+  { "pmName": "Eleena Bassam El-Sous", "address": "73C Clarence Street, Condell Park, NSW 2200" },
+  { "pmName": "Mary Azzi", "address": "20 Beale Street, Georges Hall, NSW 2198" },
+  { "pmName": "Farah Antown", "address": "16 Dredge Avenue, Moorebank, NSW 2170" },
+  { "pmName": "Eleena Bassam El-Sous", "address": "87 Townsend Street, Condell Park, NSW 2200" },
+  { "pmName": "Mary Azzi", "address": "58 Marden Street, Georges Hall, NSW 2198" },
+  { "pmName": "Eleena Bassam El-Sous", "address": "15/24 Brandon Avenue, Bankstown, NSW 2200" },
+  { "pmName": "Farah Antown", "address": "74A Cantrell Street, Yagoona, NSW 2199" },
+  { "pmName": "Mary Azzi", "address": "30 Lowana Street, Villawood, NSW 2163" },
+  { "pmName": "Michelle Clay", "address": "19 Donington Avenue, Georges Hall, NSW 2198" },
+  { "pmName": "Eleena Bassam El-Sous", "address": "35 Chertsey Avenue, Bankstown, NSW 2200" },
+  { "pmName": "Mary Azzi", "address": "7/299 Lakemba Street, Wiley Park, NSW 2195" },
+  { "pmName": "Jessie Hodkinson", "address": "5A Tyalgum Avenue, Panania, NSW 2213" },
+  { "pmName": "Eleena Bassam El-Sous", "address": "45 Campbell Hill Road, Guildford, NSW 2161" },
+  { "pmName": "Jessie Hodkinson", "address": "88/169 Horsley Road, Panania, NSW 2213" },
+  { "pmName": "Michelle Clay", "address": "26A Yarran Street, Punchbowl, NSW 2196" },
+  { "pmName": "Mary Azzi", "address": "1/114 Taylor Street, Condell Park, NSW 2200" },
+  { "pmName": "Jessie Hodkinson", "address": "357A Marion Street, Georges Hall, NSW 2198" },
+  { "pmName": "Mary Azzi", "address": "35 Brodie Street, Yagoona, NSW 2199" },
+  { "pmName": "Mary Azzi", "address": "302/106 Brancourt Avenue, Yagoona, NSW 2199" },
+  { "pmName": "Jessie Hodkinson", "address": "13/14 Conway Road, Bankstown, NSW 2200" },
+  { "pmName": "Farah Antown", "address": "10/73-75 Reynolds Avenue, Bankstown, NSW 2200" },
+  { "pmName": "Michelle Clay", "address": "50 Dutton Street, Bankstown, NSW 2200" },
+  { "pmName": "Anessa McGrath", "address": "61A Denman Road, Georges Hall, NSW 2198" },
+  { "pmName": "Michelle Clay", "address": "28 Rex Road, Georges Hall, NSW 2198" },
+  { "pmName": "Michelle Clay", "address": "18B Vista Crescent, Chester Hill, NSW 2162" },
+  { "pmName": "Michelle Clay", "address": "136 Johnston Road, Bass Hill, NSW 2197" },
+  { "pmName": "Farah Antown", "address": "1/1 Eldon Avenue, Georges Hall, NSW 2198" },
   { "pmName": "Farah Antown", "address": "44 Cann Street, Bass Hill, NSW 2197" },
-  { "pmName": "Mary Azzi", "address": "20 Beale Street, Georges Hall, NSW 2198 " },
-  { "pmName": "Farah Antown", "address": "3A English Street, Revesby, NSW 2212" },
-  { "pmName": "Mary Azzi", "address": "4/11-13 Resthaven Road, Bankstown, NSW 2200 " },
-  { "pmName": "Mary Azzi", "address": "19A Verbena Avenue, Bankstown, NSW 2200 " },
-  { "pmName": "Jessie Hodkinson", "address": "A301/4 French Avenue, Bankstown, NSW 2200" },
-  { "pmName": "Mary Azzi", "address": "3 Hargreaves Street, Condell Park, NSW 2200" },
-  { "pmName": "Farah Antown", "address": "115 Macquarie Street, Greenacre, NSW 2190" },
-  { "pmName": "Anessa McGrath", "address": "7/2-4 Myrtle Road, Bankstown, NSW 2200 " },
-  { "pmName": "Mary Azzi", "address": "35A Myall Street, Punchbowl, NSW 2196" },
-  { "pmName": "Eleena Bassam El-Sous", "address": "22 Polo Street, Revesby, NSW 2212" },
-  { "pmName": "Mary Azzi", "address": "14 Greater Circuit, Bass Hill, NSW 2197" },
+  { "pmName": "Michelle Clay", "address": "91A Taylor Street, Condell Park, NSW 2200" },
+  { "pmName": "Mary Azzi", "address": "6/32-34 Sixth Avenue, Campsie, NSW 2194" },
+  { "pmName": "Michelle Clay", "address": "21/36 Sir Joseph Banks Street, Bankstown, NSW 2200" },
+  { "pmName": "Farah Antown", "address": "16A Dredge Avenue, Moorebank, NSW 2170" },
+  { "pmName": "Eleena Bassam El-Sous", "address": "45 Chertsey Avenue, Bankstown, NSW 2200" },
+  { "pmName": "Jessie Hodkinson", "address": "223 Henry Lawson Drive, Georges Hall, NSW 2198" },
+  { "pmName": "Mary Azzi", "address": "14 Nyora Street, Chester Hill, NSW 2162" },
+  { "pmName": "Michelle Clay", "address": "34 Virtue Street, Condell Park, NSW 2200" },
+  { "pmName": "Anessa McGrath", "address": "499 Marion Street, Georges Hall, NSW 2198" },
+  { "pmName": "Farah Antown", "address": "48A Larien Crescent, Birrong, NSW 2143" },
+  { "pmName": "Jessie Hodkinson", "address": "307/465 Chapel Road, Bankstown, NSW 2200" },
+  { "pmName": "Eleena Bassam El-Sous", "address": "14 Wilkins Street, Bankstown, NSW 2200" },
+  { "pmName": "Eleena Bassam El-Sous", "address": "88 Yanderra Street, Condell Park, NSW 2200" },
+  { "pmName": "Farah Antown", "address": "100 Hunter Street, Condell Park, NSW 2200" },
+  { "pmName": "Farah Antown", "address": "22 Spicer Avenue, Hammondville, NSW 2170" },
+  { "pmName": "Jessie Hodkinson", "address": "302/21-25 Leonard Street, Bankstown, NSW 2200" },
+  { "pmName": "Michelle Clay", "address": "232A Marion Street, Bankstown, NSW 2200" },
+  { "pmName": "Jessie Hodkinson", "address": "712/16-20 Meredith Street, Bankstown, NSW 2200" },
+  { "pmName": "Eleena Bassam El-Sous", "address": "14/11 Milton Street, Bankstown, NSW 2200" },
+  { "pmName": "Mary Azzi", "address": "1/133 Hector Street, Sefton, NSW 2162" },
+  { "pmName": "Michelle Clay", "address": "29/22-24 Sir Joseph Banks Street, Bankstown, NSW 2200" },
+  { "pmName": "Mary Azzi", "address": "8A Australia Street, Bass Hill, NSW 2197" },
+  { "pmName": "Mary Azzi", "address": "5/49-55 Jacobs Street, Bankstown, NSW 2200" },
+  { "pmName": "Jessie Hodkinson", "address": "15 Edgar Street, Yagoona, NSW 2199" },
+  { "pmName": "Michelle Clay", "address": "14 Gail Place, Bankstown, NSW 2200" },
+  { "pmName": "Mary Azzi", "address": "6 Beryl Place, Greenacre, NSW 2190" },
   { "pmName": "Jessie Hodkinson", "address": "B502/75 Rickard Road, Bankstown, NSW 2200" },
-  { "pmName": "Mary Azzi", "address": "31 Brancourt Avenue, Bankstown, NSW 2200 " },
-  { "pmName": "Mary Azzi", "address": "6/110 Lakemba Street, Lakemba, NSW 2195 " },
-  { "pmName": "Mary Azzi", "address": "B302/17 Hanna Street, Potts Hill, NSW 2143 " },
-  { "pmName": "Mary Azzi", "address": "205/106 Brancourt Avenue, Yagoona, NSW 2199" },
+  { "pmName": "Farah Antown", "address": "5/22 Marlene Crescent, Chullora, NSW 2190" },
+  { "pmName": "Mary Azzi", "address": "B302/17 Hanna Street, Potts Hill, NSW 2145" },
+  { "pmName": "Eleena Bassam El-Sous", "address": "73B Clarence Street, Condell Park, NSW 2200" },
+  { "pmName": "Eleena Bassam El-Sous", "address": "808/16 Meredith Street, Bankstown, NSW 2200" },
+  { "pmName": "Farah Antown", "address": "58A Allum Street, Bankstown, NSW 2200" },
+  { "pmName": "Farah Antown", "address": "1/76 Cantrell Street, Yagoona, NSW 2199" },
+  { "pmName": "Jessie Hodkinson", "address": "12/33 Sir Joseph Banks Street, Bankstown, NSW 2200" },
+  { "pmName": "Michelle Clay", "address": "26 Lucinda Avenue, Bass Hill, NSW 2197" },
+  { "pmName": "Mary Azzi", "address": "12/30-34 Sir Joseph Banks Street, Bankstown, NSW 2200" },
+  { "pmName": "Mary Azzi", "address": "3/30-34 Sir Joseph Banks Street, Bankstown, NSW 2200" },
+  { "pmName": "Farah Antown", "address": "3/10-12 Myee Street, Lakemba, NSW 2195" },
+  { "pmName": "Michelle Clay", "address": "2B Ashby Avenue, Yagoona, NSW 2199" },
+  { "pmName": "Farah Antown", "address": "10/10 Milton Street, Bankstown, NSW 2200" },
+  { "pmName": "Anessa McGrath", "address": "1 Minmai Road, Chester Hill, NSW 2162" },
+  { "pmName": "Michelle Clay", "address": "2/67A Taylor Street, Condell Park, NSW 2200" },
+  { "pmName": "Michelle Clay", "address": "66A Smith Road, Yagoona, NSW 2199" },
+  { "pmName": "Farah Antown", "address": "210/351C Hume Highway, Bankstown, NSW 2200" },
+  { "pmName": "Mary Azzi", "address": "1/57 Dutton Street, Bankstown, NSW 2200" },
+  { "pmName": "Mary Azzi", "address": "19/30-34 Sir Joseph Banks Street, Bankstown, NSW 2200" },
+  { "pmName": "Jessie Hodkinson", "address": "13 Winifred Street, Condell Park, NSW 2200" },
+  { "pmName": "Mary Azzi", "address": "1249 Canterbury Road, Punchbowl, NSW 2196" },
+  { "pmName": "Mary Azzi", "address": "16 Petunia Avenue, Bankstown, NSW 2200" },
+  { "pmName": "Anessa McGrath", "address": "47/159 Chapel Road, Bankstown, NSW 2200" },
+  { "pmName": "Mary Azzi", "address": "204/106 Brancourt Avenue, Yagoona, NSW 2199" },
+  { "pmName": "Michelle Clay", "address": "104 Simmat Avenue, Condell Park, NSW 2200" },
+  { "pmName": "Mary Azzi", "address": "1 Suva Crescent, Greenacre, NSW 2190" },
+  { "pmName": "Michelle Clay", "address": "19A Donington Avenue, Georges Hall, NSW 2198" },
+  { "pmName": "Mary Azzi", "address": "36/30-34 Sir Joseph Banks Street, Bankstown, NSW 2200" },
+  { "pmName": "Farah Antown", "address": "11A King Georges Road, Wiley Park, NSW 2195" },
+  { "pmName": "Farah Antown", "address": "115 Macquarie Street, Greenacre, NSW 2190" },
+  { "pmName": "Farah Antown", "address": "207 Wattle Street, Bankstown, NSW 2200" },
+  { "pmName": "Anessa McGrath", "address": "19 Virtue Street, Condell Park, NSW 2200" },
+  { "pmName": "Mary Azzi", "address": "107/37 Leonard Street, Bankstown, NSW 2200" },
+  { "pmName": "Eleena Bassam El-Sous", "address": "12/24 Brandon Avenue, Bankstown, NSW 2200" },
+  { "pmName": "Farah Antown", "address": "79A Townsend Street, Condell Park, NSW 2200" },
+  { "pmName": "Eleena Bassam El-Sous", "address": "64 Townsend Street, Condell Park, NSW 2200" },
+  { "pmName": "Farah Antown", "address": "34 Haig Avenue, Georges Hall, NSW 2198" },
+  { "pmName": "Farah Antown", "address": "48 Larien Crescent, Birrong, NSW 2143" },
+  { "pmName": "Jessie Hodkinson", "address": "19/6 Myrtle Road, Bankstown, NSW 2200" },
+  { "pmName": "Jessie Hodkinson", "address": "953 Hume Highway, Bass Hill, NSW 2197" },
+  { "pmName": "Mary Azzi", "address": "16A Petunia Avenue, Bankstown, NSW 2200" },
+  { "pmName": "Mary Azzi", "address": "33A Kurrajong Avenue, Georges Hall, NSW 2198" },
+  { "pmName": "Mary Azzi", "address": "1/13 Newman Street, Bass Hill, NSW 2197" },
+  { "pmName": "Farah Antown", "address": "6/94-96 Brancourt Avenue, Yagoona, NSW 2199" },
+  { "pmName": "Michelle Clay", "address": "10 Emery Avenue, Yagoona, NSW 2199" },
+  { "pmName": "Michelle Clay", "address": "72 Old Kent Road, Mount Lewis, NSW 2190" },
+  { "pmName": "Michelle Clay", "address": "22/14 Melanie Street, Yagoona, NSW 2199" },
+  { "pmName": "Farah Antown", "address": "125 Birdwood Road, Georges Hall, NSW 2198" },
+  { "pmName": "Mary Azzi", "address": "B202/40 Hoskins Avenue, Bankstown, NSW 2200" },
+  { "pmName": "Farah Antown", "address": "60 Renown Avenue, Wiley Park, NSW 2195" },
+  { "pmName": "Eleena Bassam El-Sous", "address": "46A Johnston Road, Bass Hill, NSW 2197" },
+  { "pmName": "Farah Antown", "address": "40 Market Street, Condell Park, NSW 2200" },
+  { "pmName": "Farah Antown", "address": "39 Saric Avenue, Georges Hall, NSW 2198" },
+  { "pmName": "Mary Azzi", "address": "27 Ely Street, Revesby, NSW 2212" },
+  { "pmName": "Farah Antown", "address": "147 The River Road, Revesby, NSW 2212" },
+  { "pmName": "Farah Antown", "address": "4 Townsend Street, Condell Park, NSW 2200" },
+  { "pmName": "Eleena Bassam El-Sous", "address": "12 York Street, Condell Park, NSW 2200" },
+  { "pmName": "Michelle Clay", "address": "4/279 Miller Road, Bass Hill, NSW 2197" },
+  { "pmName": "Farah Antown", "address": "27 Jacaranda Drive, Georges Hall, NSW 2198" },
+  { "pmName": "Michelle Clay", "address": "25 Lancelot Street, Condell Park, NSW 2200" },
+  { "pmName": "Farah Antown", "address": "22/38 Meredith Street, Bankstown, NSW 2200" },
+  { "pmName": "Michelle Clay", "address": "6 Amber Place, Bass Hill, NSW 2197" },
+  { "pmName": "Farah Antown", "address": "23 Jocelyn Street, Chester Hill, NSW 2162" },
+  { "pmName": "Michelle Clay", "address": "3/279 Miller Road, Bass Hill, NSW 2197" },
+  { "pmName": "Mary Azzi", "address": "19 Verbena Avenue, Bankstown, NSW 2200" },
+  { "pmName": "Mary Azzi", "address": "17A Lumeah Avenue, Punchbowl, NSW 2196" },
+  { "pmName": "Farah Antown", "address": "5/23 Pringle Avenue, Bankstown, NSW 2200" },
+  { "pmName": "Mary Azzi", "address": "18/30-34 Sir Joseph Banks Street, Bankstown, NSW 2200" },
+  { "pmName": "Farah Antown", "address": "38 Universal Avenue, Georges Hall, NSW 2198" },
+  { "pmName": "Farah Antown", "address": "20 Norman Street, Condell Park, NSW 2200" },
+  { "pmName": "Farah Antown", "address": "46A Colechin Street, Yagoona, NSW 2199" },
+  { "pmName": "Mary Azzi", "address": "17/30-34 Sir Joseph Banks Street, Bankstown, NSW 2200" },
+  { "pmName": "Anessa McGrath", "address": "28/6 Myrtle Road, Bankstown, NSW 2200" },
+  { "pmName": "Michelle Clay", "address": "7 Lille Place, Milperra, NSW 2214" },
+  { "pmName": "Mary Azzi", "address": "104/106 Brancourt Avenue, Yagoona, NSW 2199" },
+  { "pmName": "Mary Azzi", "address": "17/15-25 Jacobs Street, Bankstown, NSW 2200" },
+  { "pmName": "Michelle Clay", "address": "8/45 Jacobs Street, Bankstown, NSW 2200" },
+  { "pmName": "Mary Azzi", "address": "14 Carnegie Road, Chester Hill, NSW 2162" },
+  { "pmName": "Anessa McGrath", "address": "5A Wright Close, Georges Hall, NSW 2198" },
+  { "pmName": "Mary Azzi", "address": "13/30-34 Sir Joseph Banks Street, Bankstown, NSW 2200" },
+  { "pmName": "Mary Azzi", "address": "4/11-13 Resthaven Road, Bankstown, NSW 2200" },
+  { "pmName": "Mary Azzi", "address": "19 Rose Street, Punchbowl, NSW 2196" },
+  { "pmName": "Michelle Clay", "address": "43 Horsley Road, Revesby, NSW 2212" },
+  { "pmName": "Mary Azzi", "address": "27/4-6 Dellwood Street, Bankstown, NSW 2200" },
+  { "pmName": "Mary Azzi", "address": "803/61 Rickard Road, Bankstown, NSW 2200" },
+  { "pmName": "Farah Antown", "address": "2/36 Robinson Street, Wiley Park, NSW 2195" },
+  { "pmName": "Mary Azzi", "address": "14 Greater Circuit, Bass Hill, NSW 2197" },
+  { "pmName": "Jessie Hodkinson", "address": "302/465 Chapel Road, Bankstown, NSW 2200" },
+  { "pmName": "Michelle Clay", "address": "1/48 Avoca Street, Yagoona, NSW 2199" },
+  { "pmName": "Mary Azzi", "address": "35/91-95 Meredith Street, Bankstown, NSW 2200" },
+  { "pmName": "Mary Azzi", "address": "21 Irvine Street, Bankstown, NSW 2200" },
+  { "pmName": "Eleena Bassam El-Sous", "address": "73A Clarence Street, Condell Park, NSW 2200" },
+  { "pmName": "Eleena Bassam El-Sous", "address": "46 Johnston Road, Bass Hill, NSW 2197" },
+  { "pmName": "Eleena Bassam El-Sous", "address": "6/2-4 Myrtle Road, Bankstown, NSW 2200" },
+  { "pmName": "Eleena Bassam El-Sous", "address": "5 Talinga Avenue, Georges Hall, NSW 2198" },
+  { "pmName": "Michelle Clay", "address": "47 Baxter Road, Bass Hill, NSW 2197" },
+  { "pmName": "Michelle Clay", "address": "55 Rose Street, Sefton, NSW 2162" },
+  { "pmName": "Michelle Clay", "address": "22 Wentworth Street, Birrong, NSW 2143" },
+  { "pmName": "Michelle Clay", "address": "1/8 Lee Street, Condell Park, NSW 2200" },
+  { "pmName": "Eleena Bassam El-Sous", "address": "11/13-15 Cairds Avenue, Bankstown, NSW 2200" },
+  { "pmName": "Mary Azzi", "address": "292 Miller Road, Bass Hill, NSW 2197" },
+  { "pmName": "Michelle Clay", "address": "58 Alamein Road, Revesby Heights, NSW 2212" },
+  { "pmName": "Michelle Clay", "address": "65 Little Road, Yagoona, NSW 2199" },
+  { "pmName": "Eleena Bassam El-Sous", "address": "8/3 Fetherstone Street, Bankstown, NSW 2200" },
+  { "pmName": "Jessie Hodkinson", "address": "709/16-20 Meredith Street, Bankstown, NSW 2200" },
+  { "pmName": "Mary Azzi", "address": "3/73 Denman Avenue, Wiley Park, NSW 2195" },
+  { "pmName": "Jessie Hodkinson", "address": "3 Saric Avenue, Georges Hall, NSW 2198" },
+  { "pmName": "Farah Antown", "address": "22/146 Meredith Street, Bankstown, NSW 2200" },
+  { "pmName": "Eleena Bassam El-Sous", "address": "21 Townsend Street, Condell Park, NSW 2200" },
+  { "pmName": "Michelle Clay", "address": "4 Savoy Crescent, Chester Hill, NSW 2162" },
+  { "pmName": "Farah Antown", "address": "10B Frank Street, Mount Lewis, NSW 2190" },
+  { "pmName": "Eleena Bassam El-Sous", "address": "3/43 Taylor Street, Condell Park, NSW 2200" },
+  { "pmName": "Anessa McGrath", "address": "5/3 Shenton Avenue, Bankstown, NSW 2200" },
+  { "pmName": "Michelle Clay", "address": "18/85-87 Chapel Road, Bankstown, NSW 2200" },
+  { "pmName": "Jessie Hodkinson", "address": "229 Marion Street, Bankstown, NSW 2200" },
+  { "pmName": "Michelle Clay", "address": "25 Curtis Road, Chester Hill, NSW 2162" },
+  { "pmName": "Jessie Hodkinson", "address": "187A Rex Road, Georges Hall, NSW 2198" },
+  { "pmName": "Eleena Bassam El-Sous", "address": "3/1-3 Carmen Street, Bankstown, NSW 2200" },
+  { "pmName": "Eleena Bassam El-Sous", "address": "22 Hinkler Avenue, Condell Park, NSW 2200" },
+  { "pmName": "Anessa McGrath", "address": "2/8 Hixson Street, Bankstown, NSW 2200" },
+  { "pmName": "Eleena Bassam El-Sous", "address": "1/5 Denman Avenue, Wiley Park, NSW 2195" },
+  { "pmName": "Farah Antown", "address": "9 Saltash Street, Yagoona, NSW 2199" },
+  { "pmName": "Michelle Clay", "address": "2/8-10 Revesby Place, Revesby, NSW 2212" },
+  { "pmName": "Farah Antown", "address": "29/2A Mulla Road, Yagoona, NSW 2199" },
+  { "pmName": "Michelle Clay", "address": "22a Wynyard Avenue, Bass Hill, NSW 2197" },
+  { "pmName": "Anessa McGrath", "address": "1/72-74 Meredith Street, Bankstown, NSW 2200" },
+  { "pmName": "Farah Antown", "address": "93B Simmat Avenue, Condell Park, NSW 2200" },
+  { "pmName": "Michelle Clay", "address": "24/1-5 Bungalow Crescent, Bankstown, NSW 2200" },
+  { "pmName": "Michelle Clay", "address": "55 The Avenue, Bankstown, NSW 2200" },
+  { "pmName": "Mary Azzi", "address": "12/17-27 Rickard Road, Bankstown, NSW 2200" },
+  { "pmName": "Mary Azzi", "address": "12/45 De Witt Street, Bankstown, NSW 2200" },
+  { "pmName": "Mary Azzi", "address": "148 Boronia Road, Greenacre, NSW 2190" },
+  { "pmName": "Anessa McGrath", "address": "17 Sturt Avenue, Georges Hall, NSW 2198" },
+  { "pmName": "Farah Antown", "address": "69A Wattle Street, Punchbowl, NSW 2196" },
+  { "pmName": "Anessa McGrath", "address": "5/7-9 Mulla Road, Yagoona, NSW 2199" },
+  { "pmName": "Mary Azzi", "address": "40 Haig Avenue, Georges Hall, NSW 2198" },
+  { "pmName": "Farah Antown", "address": "48 Norfolk Road, Greenacre, NSW 2190" },
+  { "pmName": "Anessa McGrath", "address": "6/13 Cairds Avenue, Bankstown, NSW 2200" },
+  { "pmName": "Farah Antown", "address": "8 Caldwell Parade, Yagoona, NSW 2199" },
+  { "pmName": "Farah Antown", "address": "6 Barlow Place, Georges Hall, NSW 2198" },
+  { "pmName": "Farah Antown", "address": "6/34-36 Weigand Avenue, Bankstown, NSW 2200" },
+  { "pmName": "Michelle Clay", "address": "93 Stansfield Avenue, Bankstown, NSW 2200" },
+  { "pmName": "Farah Antown", "address": "32A Gleeson Avenue, Condell Park, NSW 2200" },
+  { "pmName": "Mary Azzi", "address": "22/7-13 Melanie Street, Bankstown, NSW 2200" },
+  { "pmName": "Mary Azzi", "address": "2/114 Taylor Street, Condell Park, NSW 2200" },
+  { "pmName": "Anessa McGrath", "address": "2/40 Carnavon Crescent, Georges Hall, NSW 2198" },
+  { "pmName": "Mary Azzi", "address": "5/40-44 Chertsey Avenue, Bankstown, NSW 2200" },
+  { "pmName": "Mary Azzi", "address": "2/4 Campbell Street, Punchbowl, NSW 2196" },
+  { "pmName": "Jessie Hodkinson", "address": "25a Acacia Avenue, Punchbowl, NSW 2196" },
+  { "pmName": "Michelle Clay", "address": "5/14 Melanie Street, Yagoona, NSW 2199" },
+  { "pmName": "Jessie Hodkinson", "address": "605/465 Chapel Road, Bankstown, NSW 2200" },
+  { "pmName": "Mary Azzi", "address": "19A Verbena Avenue, Bankstown, NSW 2200" },
+  { "pmName": "Michelle Clay", "address": "6/133 Chester Hill Road, Bass Hill, NSW 2197" },
+  { "pmName": "Michelle Clay", "address": "7 Grevillea Road, Chester Hill, NSW 2162" },
+  { "pmName": "Anessa McGrath", "address": "3/19 Highland Avenue, Bankstown, NSW 2200" },
+  { "pmName": "Jessie Hodkinson", "address": "1/61 Broad Street, Bass Hill, NSW 2197" },
+  { "pmName": "Mary Azzi", "address": "114B Acacia Avenue, Greenacre, NSW 2190" },
+  { "pmName": "Mary Azzi", "address": "601/16-20 Meredith Street, Bankstown, NSW 2200" },
+  { "pmName": "Mary Azzi", "address": "21 Caldwell Parade, Yagoona, NSW 2199" },
+  { "pmName": "Jessie Hodkinson", "address": "103 Wilkins Street, Bankstown, NSW 2200" },
+  { "pmName": "Eleena Bassam El-Sous", "address": "20/27 Raymond Street, Bankstown, NSW 2200" },
+  { "pmName": "Eleena Bassam El-Sous", "address": "7/19-21 Milton Street, Bankstown, NSW 2200" },
+  { "pmName": "Eleena Bassam El-Sous", "address": "37 Chertsey Avenue, Bankstown, NSW 2200" },
+  { "pmName": "Eleena Bassam El-Sous", "address": "11/7-13 Melanie Street, Bankstown, NSW 2200" },
+  { "pmName": "Eleena Bassam El-Sous", "address": "20/55 Reynolds Avenue, Bankstown, NSW 2200" },
+  { "pmName": "Eleena Bassam El-Sous", "address": "9/10-14 Milton Street, Bankstown, NSW 2200" },
+  { "pmName": "Eleena Bassam El-Sous", "address": "10/85 Cairds Avenue, Bankstown, NSW 2200" },
+  { "pmName": "Mary Azzi", "address": "10 Talbot Road, Yagoona, NSW 2199" },
+  { "pmName": "Michelle Clay", "address": "74 Rowe Drive, Potts Hill, NSW 2145" },
+  { "pmName": "Anessa McGrath", "address": "61B Denman Road, Georges Hall, NSW 2198" },
+  { "pmName": "Farah Antown", "address": "12B Maclaurin Avenue, East Hills, NSW 2213" },
+  { "pmName": "Jessie Hodkinson", "address": "40/33-35 Sir Joseph Banks St, Bankstown, NSW 2200" },
+  { "pmName": "Farah Antown", "address": "44 Denman Road, Georges Hall, NSW 2198" },
+  { "pmName": "Mary Azzi", "address": "2/11-13 Resthaven Road, Bankstown, NSW 2200" },
+  { "pmName": "Jessie Hodkinson", "address": "7/19 Etela Street, Belmore, NSW 2192" },
+  { "pmName": "Jessie Hodkinson", "address": "706/61 Rickard Road, Bankstown, NSW 2200" },
+  { "pmName": "Farah Antown", "address": "5/32-34 Fifth Avenue, Campsie, NSW 2194" },
+  { "pmName": "Eleena Bassam El-Sous", "address": "36 Munro Street, Sefton, NSW 2162" },
+  { "pmName": "Mary Azzi", "address": "G03/106 Brancourt Avenue, Yagoona, NSW 2199" },
+  { "pmName": "Farah Antown", "address": "42A Flinders Road, Georges Hall, NSW 2198" },
+  { "pmName": "Eleena Bassam El-Sous", "address": "7/85-87 Chapel Road, Bankstown, NSW 2200" },
+  { "pmName": "Mary Azzi", "address": "15/31-33 Myrtle Road, Bankstown, NSW 2200" },
+  { "pmName": "Mary Azzi", "address": "7/32-34 Sixth Avenue, Campsie, NSW 2194" },
+  { "pmName": "Anessa McGrath", "address": "303/11 Jacobs Street, Bankstown, NSW 2200" },
+  { "pmName": "Jessie Hodkinson", "address": "29/14 Melanie Street, Yagoona, NSW 2199" },
+  { "pmName": "Mary Azzi", "address": "102/37 Leonard Street, Bankstown, NSW 2200" },
+  { "pmName": "Mary Azzi", "address": "B204/40 Hoskins Avenue, Bankstown, NSW 2200" },
+  { "pmName": "Mary Azzi", "address": "90 Queen Street, Revesby, NSW 2212" },
+  { "pmName": "Michelle Clay", "address": "666 Hume Highway, Yagoona, NSW 2199" },
+  { "pmName": "Jessie Hodkinson", "address": "6/2-4 Mary Street, Wiley Park, NSW 2195" },
+  { "pmName": "Jessie Hodkinson", "address": "33 Purvis Avenue, Potts Hill, NSW 2145" },
+  { "pmName": "Mary Azzi", "address": "52/4 West Terrace, Bankstown, NSW 2200" },
+  { "pmName": "Michelle Clay", "address": "514/38 Kitchener Parade, Bankstown, NSW 2200" },
+  { "pmName": "Anessa McGrath", "address": "9 Conjola Cres, Leumeah, NSW 2560" },
+  { "pmName": "Jessie Hodkinson", "address": "17 Edward Street, Bankstown, NSW 2200" },
+  { "pmName": "Michelle Clay", "address": "3/8-10 Revesby Place, Revesby, NSW 2212" },
+  { "pmName": "Eleena Bassam El-Sous", "address": "22 Polo Street, Revesby, NSW 2212" },
+  { "pmName": "Eleena Bassam El-Sous", "address": "38 Yanderra Street, Condell Park, NSW 2200" },
+  { "pmName": "Anessa McGrath", "address": "58/8 Myrtle Road, Bankstown, NSW 2200" },
+  { "pmName": "Michelle Clay", "address": "407/25 Meredith Street, Bankstown, NSW 2200" },
+  { "pmName": "Farah Antown", "address": "98 Campbell Hill Road, Chester Hill, NSW 2162" },
+  { "pmName": "Mary Azzi", "address": "G02/106 Brancourt Avenue, Yagoona, NSW 2199" },
+  { "pmName": "Anessa McGrath", "address": "7/2-4 Myrtle Road, Bankstown, NSW 2200" },
+  { "pmName": "Jessie Hodkinson", "address": "A301/4 French Avenue, Bankstown, NSW 2200" },
+  { "pmName": "Mary Azzi", "address": "31 Brancourt Avenue, Bankstown, NSW 2200" },
+  { "pmName": "Farah Antown", "address": "11 King Georges Road, Wiley Park, NSW 2195" },
+  { "pmName": "Mary Azzi", "address": "4/14-16 Gordon Street, Bankstown, NSW 2200" },
+  { "pmName": "Anessa McGrath", "address": "49 Lough Avenue, Guildford, NSW 2161" },
+  { "pmName": "Mary Azzi", "address": "3 Hargreaves Street, Condell Park, NSW 2200" },
+  { "pmName": "Farah Antown", "address": "12 Georges River Road, Croydon Park, NSW 2133" },
+  { "pmName": "Farah Antown", "address": "59A Australia Street, Bass Hill, NSW 2197" },
+  { "pmName": "Farah Antown", "address": "107 Auburn Road, Birrong, NSW 2143" },
+  { "pmName": "Mary Azzi", "address": "35A Myall Street, Punchbowl, NSW 2196" },
+  { "pmName": "Anessa McGrath", "address": "13 Stephenson Street, Birrong, NSW 2143" },
+  { "pmName": "Farah Antown", "address": "23 Cairds Avenue, Bankstown, NSW 2200" },
+  { "pmName": "Mary Azzi", "address": "6/110 Lakemba Street, Lakemba, NSW 2195" },
   { "pmName": "Eleena Bassam El-Sous", "address": "2 Lambert Street, Yagoona, NSW 2199" },
-  { "pmName": "Eleena Bassam El-Sous", "address": "205/106 Brancourt Avenue, Yagoona, NSW 2199" },
-
+  { "pmName": "Anessa McGrath", "address": "15a Gallipoli Street, Condell Park, NSW 2200" },
+  { "pmName": "Mary Azzi", "address": "14/94 Brancourt Avenue, Yagoona, NSW 2199" },
+  { "pmName": "Mary Azzi", "address": "205/106 Brancourt Avenue, Yagoona, NSW 2199" },
+  { "pmName": "Jessie Hodkinson", "address": "A503/443 Chapel Road, Bankstown, NSW 2200" },
+  { "pmName": "Farah Antown", "address": "12A Frank Street, Mount Lewis, NSW 2190" },
+  { "pmName": "Michelle Clay", "address": "4/324 Hector Street, Bass Hill, NSW 2197" },
+  { "pmName": "Eleena Bassam El-Sous", "address": "3 Cassia Place, Bass Hill, NSW 2197" },
+  { "pmName": "Farah Antown", "address": "3A English Street, Revesby, NSW 2212" },
+  { "pmName": "Jessie Hodkinson", "address": "10 Edgar St, Yagoona, NSW 2199" },
+  { "pmName": "Matthew Natoli", "address": "32 Swan Circuit, Green Valley, NSW 2168" },
+  { "pmName": "Farah Antown", "address": "18 Ridgeway Close, West Hoxton, NSW 2171" },
+  { "pmName": "Matthew Natoli", "address": "374 Chapel Road, Bankstown, NSW 2200" },
 ];
 
 async function lookupPropertyManager(query) {
   const q = (query || "").toLowerCase();
 
-  let source = "api";
-  let searchData = [];
-
-  const now = Date.now();
-  const isCacheValid = pmCache.data && pmCache.timestamp && (now - pmCache.timestamp < pmCache.expiryMs);
-
-  if (isCacheValid) {
-    searchData = pmCache.data;
-    source = "cache";
-  } else {
-    try {
-      const response = await fetch("https://api.propertytree.io/dashboards/arrears", {
-        method: "GET",
-        headers: {
-          "Accept": "application/json",
-          "Authorization": `Bearer ${process.env.PROPERTY_TREE_TOKEN}`,
-          "x-company-id": process.env.PROPERTY_TREE_COMPANY_ID,
-          "Content-Type": "application/json",
-          "Origin": "https://dashboards-cdn.propertytree.com"
-        }
-      });
-      if (!response.ok) {
-        throw new Error(`API returned ${response.status}`);
-      }
-      const data = await response.json();
-
-      const arraysToSearch = [
-        data.residentialRent?.tenancies,
-        data.residentialInvoices?.tenancies,
-        data.commercialRent?.tenancies,
-        data.commercialOutgoings?.tenancies,
-        data.commercialInvoices?.tenancies
-      ];
-
-      const allTenancies = arraysToSearch.flat().filter(Boolean);
-
-      const uniqueAddresses = new Set();
-      searchData = [];
-      for (const t of allTenancies) {
-        if (t.property?.address && t.tenancy?.name) {
-          if (!uniqueAddresses.has(t.property.address)) {
-            uniqueAddresses.add(t.property.address);
-            searchData.push({ pmName: t.tenancy.name, address: t.property.address });
-          }
-        }
-      }
-
-      if (searchData.length > 0) {
-        pmCache.data = searchData;
-        pmCache.timestamp = now;
-      } else {
-        throw new Error("No data found in API");
-      }
-    } catch (err) {
-      console.warn("[Property Manager Lookup] API failed, using cache or fallback:", err.message);
-      if (pmCache.data) {
-        searchData = pmCache.data;
-        source = "cache";
-      } else {
-        searchData = pmFallbackData;
-        source = "fallback";
-      }
-    }
-  }
-
-  const found = searchData.find(d =>
-    d.address.toLowerCase().includes(q) ||
-    d.pmName.toLowerCase().includes(q)
+  const found = pmFallbackData.find(d =>
+    (d.address && d.address.toLowerCase().includes(q)) ||
+    (d.pmName && d.pmName.toLowerCase().includes(q))
   );
 
   if (found) {
@@ -7779,12 +8010,12 @@ async function lookupPropertyManager(query) {
       found: true,
       pmName: found.pmName,
       propertyAddress: found.address,
-      source
+      source: "fallback"
     };
   } else {
     return {
       found: false,
-      source
+      source: "fallback"
     };
   }
 }
@@ -7865,15 +8096,59 @@ function getTransferCallTool() {
             "matthew",
             "michelle",
             "noa",
-            "zena"
+            "zena",
+            "charlie",
+            "tony",
+            "lynette",
+            "guilda",
+            "samantha",
+            "codey",
+            "anthony_r",
+            "domenic",
+            "brendon",
+            "craig",
+            "allan",
+            "nikolas",
+            "anthony_j",
+            "johnny",
+            "graeme",
+            "tiago",
+            "jordon",
+            "joshua",
+            "patrick_l",
+            "charbel",
+            "lillian",
+            "patrick_s",
+            "james_h",
+            "james_d",
+            "scott",
+            "bill",
+            "eli",
+            "jeremiah",
+            "anthony_c",
+            "david",
+            "christian"
           ],
           description:
             "Where to transfer the call. Use 'reception' for general enquiries, buying, selling, new landlords, application status, Directors, Sales Agents. " +
-            "Use 'afterhours' only as a last resort when a PM is needed but cannot be identified. " +
+            "Use 'afterhours' ONLY for genuine out-of-hours emergencies (locked out, no hot water at night, safety risk). " +
+            "If a PM cannot be identified during normal business hours, use 'reception' instead — never 'afterhours'. " +
             "Use the person's first name key when caller names a specific staff member or lookupPropertyManager returns their name. " +
-            "Key mapping: anessa=Anessa McGrath, chelsea=Chelsea Moussa, eleena=Eleena Bassam El-Sous, " +
+            "CRITICAL: If a caller gives only a first name that belongs to multiple staff, ALWAYS ask for last name or department before transferring — never assume. " +
+            "Multiple Anthonys: anthony_r=Anthony Roumanous, anthony_j=Anthony Jaja, anthony_c=Anthony Cham — ask which one before transferring. " +
+            "Multiple Patricks: patrick_s=Patrick Sioud, patrick_l=Patrick Liu — ask which one before transferring. " +
+            "Multiple James: james_h=James Huang, james_d=James Duong — ask which one before transferring. " +
+            "Key mapping — Property Managers: anessa=Anessa McGrath, chelsea=Chelsea Moussa, eleena=Eleena Bassam El-Sous, " +
             "ethan=Ethan Tran, farah=Farah Antown, jessie=Jessie Hodkinson, mary=Mary Azzi, " +
             "matthew=Matthew Natoli, michelle=Michelle Clay, noa=Noa Callus, zena=Zena Issa. " +
+            "Key mapping — Sales & Directors: charlie=Charlie Sioud, tony=Tony Roumanous, jordon=Jordon Le Breux, joshua=Joshua Nassif. " +
+            "Key mapping — Other Staff: lynette=Lynette Vazquez, guilda=Guilda Slan, samantha=Samantha Hanna, " +
+            "codey=Codey Camilleri, anthony_r=Anthony Roumanous, domenic=Domenic Boustani, brendon=Brendon Abouchrouche, " +
+            "craig=Craig Stephenson, allan=Allan Zeino, nikolas=Nikolas Papadopoulos, anthony_j=Anthony Jaja, " +
+            "johnny=Johnny Nguyen, graeme=Graeme Rudder, tiago=Tiago Armaelo, patrick_l=Patrick Liu, " +
+            "charbel=Charbel Elias, lillian=Lillian Bashir, patrick_s=Patrick Sioud, james_h=James Huang, " +
+            "james_d=James Duong, scott=Scott Johansen-James, bill=Bill Hanna, eli=Eli Eid, " +
+            "jeremiah=Jeremiah Shashati, anthony_c=Anthony Cham, david=David Avni, christian=Christian Alha. " +
             "Use 'john' only when caller explicitly asks for John.",
         },
         reason: {
