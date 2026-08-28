@@ -8010,16 +8010,40 @@ const pmFallbackData = [
 async function lookupPropertyManager(query) {
   const q = (query || "").toLowerCase();
 
-  const found = pmFallbackData.find(d =>
-    (d.address && d.address.toLowerCase().includes(q)) ||
-    (d.pmName && d.pmName.toLowerCase().includes(q))
-  );
+  const tokens = q.split(/[\s,]+/).filter(t => t.length > 1);
 
-  if (found) {
+  let bestMatch = null;
+  let bestScore = 0;
+
+  for (const d of pmFallbackData) {
+    const addressLower = (d.address || "").toLowerCase();
+    const nameLower = (d.pmName || "").toLowerCase();
+
+    // Exact substring match — highest priority, stop immediately
+    if (addressLower.includes(q) || nameLower.includes(q)) {
+      bestMatch = d;
+      bestScore = 999;
+      break;
+    }
+
+    // Token scoring — count how many query words appear in the address
+    let score = 0;
+    for (const token of tokens) {
+      if (addressLower.includes(token)) score++;
+    }
+
+    // Require at least 2 matching tokens (or all tokens if query is only 1 word)
+    if (score > bestScore && score >= Math.min(2, tokens.length)) {
+      bestScore = score;
+      bestMatch = d;
+    }
+  }
+
+  if (bestMatch) {
     return {
       found: true,
-      pmName: found.pmName,
-      propertyAddress: found.address,
+      pmName: bestMatch.pmName,
+      propertyAddress: bestMatch.address,
       source: "fallback"
     };
   } else {
@@ -8070,10 +8094,8 @@ async function handleLookupPropertyManager(sessionId, call) {
         output: JSON.stringify(result)
       }
     });
-    if (!session.isResponseActive) {
-      session.isResponseActive = true;
-      sendWsJson(session.ws, { type: "response.create" });
-    }
+    session.isResponseActive = true;
+    sendWsJson(session.ws, { type: "response.create" });
   } catch (err) {
     if (callId) session.processedCallIds.delete(callId);
     console.error(`[${sessionId}] Error looking up property manager:`, err);
